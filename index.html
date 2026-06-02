@@ -402,6 +402,7 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
     <div class="fg"><label>Meta retiro ($)</label><input type="number" id="a-wd-target" placeholder="2100"></div>
     <div class="fg"><label>Min días para retiro</label><input type="number" id="a-wd-days" placeholder="8"></div>
     <div class="fg"><label>Consistencia (%)</label><input type="number" id="a-consist" placeholder="50" step="1"></div>
+    <div class="fg"><label>Ciclo de retiro actual</label><input type="number" id="a-payout-cycle" placeholder="1" min="1" value="1"></div>
     <div class="fg"><label>Fecha inicio</label><input type="date" id="a-start"></div>
     <div class="fg"><label>Color</label>
       <select id="a-color">
@@ -518,10 +519,16 @@ function acctStats(a){
   const maxDDpct=a.bal?dd/a.bal*100:0;
   const allowedDD=a.maxddUsd||(a.bal*(a.maxddPct||4)/100);
   const ddPct=allowedDD?dd/allowedDD*100:0;
-  const wdTarget=a.wdTarget||0;
-  const wdProgress=wdTarget?Math.min(100,pnl/wdTarget*100):0;
-  // consistency
+  // payout cycle logic
   const consist=a.consist||50;
+  const payoutCycle=a.payoutCycle||1; // which cycle we're on (1=first, 2+=subsequent)
+  // Lucid: goal1=3000 for cycles 1-2, goal2=2500 for cycle 3+; max payout cycles 1-3=$2000, 4-5=$2500
+  const isLucid=(a.firm||'').toLowerCase().includes('lucid');
+  const wdGoal=isLucid?(payoutCycle<=2?3000:2500):(a.wdTarget||0);
+  const wdMax=isLucid?(payoutCycle<=3?2000:2500):(a.wdTarget||0);
+  const wdTarget=isLucid?wdGoal:(a.wdTarget||0);
+  const wdProgress=wdTarget?Math.min(100,pnl/wdTarget*100):0;
+  // consistency tracking — per cycle (only current cycle profits)
   const dayPnlMap={};
   ts.forEach(t=>{const v=(t.pnl||{})[a.id]||0;if(v>0)dayPnlMap[t.date]=(dayPnlMap[t.date]||0)+v;});
   const totalProfit=Object.values(dayPnlMap).reduce((s,v)=>s+v,0);
@@ -529,10 +536,14 @@ function acctStats(a){
   const consistRatio=totalProfit?bestDay/totalProfit*100:0;
   const consistOk=totalProfit>0?consistRatio<=consist:true;
   const minProfitForWD=totalProfit>0?bestDay/(consist/100):0;
+  // safe day limit: max I can earn today without pushing consistency over the limit
+  // bestDay/(totalProfit+todayExtra) <= consist/100
+  // todayExtra <= bestDay/(consist/100) - totalProfit
+  // but only if today's gain would become the new bestDay
+  const safeDayLimit=totalProfit>0?Math.max(0, bestDay/(consist/100)-totalProfit):wdTarget*(consist/100);
   const tradingDays=ts.filter(t=>(t.pnl||{})[a.id]!==undefined).length;
-  // saldo zone (Apex)
   const saldoZone=getSaldoZone(bal,a.bal||50000);
-  return{pnl,bal,wins,losses,wr,maxDDusd,maxDDpct,ddPct,wdProgress,consistRatio,consistOk,minProfitForWD,totalProfit,bestDay,tradingDays,saldoZone,trades:ts.length};
+  return{pnl,bal,wins,losses,wr,maxDDusd,maxDDpct,ddPct,wdProgress,wdTarget,wdMax,wdGoal,isLucid,consistRatio,consistOk,minProfitForWD,safeDayLimit,totalProfit,bestDay,tradingDays,saldoZone,trades:ts.length};
 }
 
 function getSaldoZone(bal,initial){
@@ -609,11 +620,13 @@ function renderAcctsOverview(){
             <div style="font-size:10px;color:var(--text3)">Meta retiro — $${Math.max(0,s.pnl).toFixed(0)} / $${wdTarget}</div>
             <div class="wd-bg"><div class="wd-fill" style="width:${Math.min(100,s.wdProgress)}%"></div></div>
             <div class="wd-lbl"><span>$0</span><span style="color:${s.wdProgress>=100?'var(--accent)':'var(--text3)'}">$${wdTarget}${s.wdProgress>=100?' ✓':''}</span></div>
+            ${s.isLucid?`<div style="font-size:10px;color:var(--text3)">Retiro máx: $${s.wdMax} · recibes $${(s.wdMax*0.9).toFixed(0)}</div>`:''}
           </div>`:''}
           <div style="min-width:160px">
-            <div style="font-size:10px;color:${s.consistOk?'var(--green)':'var(--amber)'}">Consistencia: ${s.consistRatio.toFixed(0)}% / máx ${consist}% ${s.consistOk?'✓':'⚠'}</div>
+            <div style="font-size:10px;color:${s.consistOk?'var(--green)':'var(--amber)'}">Consistencia: ${s.consistRatio.toFixed(0)}% / máx ${a.consist||50}% ${s.consistOk?'✓':'⚠'}</div>
             ${s.totalProfit>0&&!s.consistOk?`<div style="font-size:10px;color:var(--amber)">Necesitas $${s.minProfitForWD.toFixed(0)} total para retirar</div>`:''}
-            <div style="font-size:10px;color:var(--text3)">Días operados: ${s.tradingDays} / min ${a.wdDays||8}</div>
+            <div style="font-size:10px;color:${s.safeDayLimit<200?'var(--amber)':'var(--green)'}">Límite seguro hoy: $${s.safeDayLimit.toFixed(0)}</div>
+            <div style="font-size:10px;color:var(--text3)">Días operados: ${s.tradingDays} / mín ${a.wdDays||8}</div>
           </div>
         </div>
         <div style="display:flex;gap:5px">
@@ -687,20 +700,34 @@ function renderAcctPage(id){
     </div>
     <!-- retiro + consistencia -->
     <div class="grid2">
-      ${wdTarget?`<div class="card mb0">
-        <div class="card-title">Progreso de retiro</div>
+      <div class="card mb0">
+        <div class="card-title">Progreso de retiro ${s.isLucid?'· LucidDirect':''}</div>
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
-          <span>P&L actual</span><span style="color:${s.pnl>=0?'var(--green)':'var(--red)'};font-weight:600">${s.pnl>=0?'+':''}$${s.pnl.toFixed(0)}</span>
+          <span>P&L del ciclo</span><span style="color:${s.pnl>=0?'var(--green)':'var(--red)'};font-weight:600">${s.pnl>=0?'+':''}$${s.pnl.toFixed(0)}</span>
         </div>
         <div class="wd-bg"><div class="wd-fill" style="width:${Math.min(100,s.wdProgress)}%"></div></div>
-        <div class="wd-lbl"><span>$0</span><span style="color:${s.wdProgress>=100?'var(--accent)':'var(--text3)'}">Meta: $${wdTarget} ${s.wdProgress>=100?'✓ LISTO PARA RETIRAR':''}</span></div>
-      </div>`:'<div></div>'}
+        <div class="wd-lbl"><span>$0</span><span style="color:${s.wdProgress>=100?'var(--accent)':'var(--text3)'}">Meta: $${wdTarget} ${s.wdProgress>=100?'✓':''}</span></div>
+        ${s.isLucid?`<div style="margin-top:10px;display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:11px;display:flex;justify-content:space-between"><span style="color:var(--text3)">Retiro máx este ciclo:</span><span style="color:var(--text);font-weight:600">$${s.wdMax}</span></div>
+          <div style="font-size:11px;display:flex;justify-content:space-between"><span style="color:var(--text3)">Recibes (90%):</span><span style="color:var(--accent);font-weight:600">$${(s.wdMax*0.9).toFixed(0)}</span></div>
+          <div style="font-size:11px;display:flex;justify-content:space-between"><span style="color:var(--text3)">Balance post-retiro:</span><span style="color:var(--text)">$${(a.bal||50000).toLocaleString()} (reinicia)</span></div>
+          <div style="font-size:11px;display:flex;justify-content:space-between"><span style="color:var(--text3)">Ciclo actual / meta siguiente:</span><span style="color:var(--text)">#${a.payoutCycle||1} / $${(a.payoutCycle||1)<=2?3000:2500}</span></div>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:var(--text3);padding:7px;background:var(--bg3);border-radius:var(--r)">
+          💡 Si ganas más de $${(wdTarget*0.2).toFixed(0)} en un día, la meta sube. Ideal: días de $370–500.
+        </div>`:''}
+        ${s.wdProgress>=100&&s.tradingDays>=(a.wdDays||8)&&s.consistOk?`<div style="margin-top:8px;font-size:11px;color:var(--accent);padding:7px;background:rgba(200,245,66,0.1);border-radius:var(--r);font-weight:600">✓ ¡Listo para solicitar retiro!</div>`:''}
+      </div>
       <div class="card mb0">
         <div class="card-title">Regla de consistencia (${consist}%)</div>
-        <div style="font-size:12px;color:var(--text2);margin-bottom:6px">Mejor día: <strong style="color:var(--text)">$${s.bestDay.toFixed(0)}</strong> · Total profit: <strong style="color:var(--text)">$${s.totalProfit.toFixed(0)}</strong></div>
-        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Ratio actual: <strong style="color:${s.consistOk?'var(--green)':'var(--amber)'}">${s.consistRatio.toFixed(1)}% / máx ${consist}% ${s.consistOk?'✓':'⚠'}</strong></div>
-        ${s.totalProfit>0&&!s.consistOk?`<div style="font-size:11px;color:var(--amber);padding:7px;background:rgba(255,179,71,0.1);border-radius:var(--r)">Para retirar necesitas acumular $${s.minProfitForWD.toFixed(0)} de profit total</div>`:''}
-        ${s.totalProfit>0&&s.consistOk&&wdTarget?`<div style="font-size:11px;color:var(--green);padding:7px;background:rgba(62,207,142,0.1);border-radius:var(--r)">Consistencia OK. ${s.pnl>=wdTarget&&s.tradingDays>=(a.wdDays||8)?'¡Listo para solicitar retiro!':'Acumula más profit para alcanzar la meta.'}</div>`:''}
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px">Mejor día: <strong style="color:var(--text)">$${s.bestDay.toFixed(0)}</strong> · Total profit ciclo: <strong style="color:var(--text)">$${s.totalProfit.toFixed(0)}</strong></div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Ratio actual: <strong style="color:${s.consistOk?'var(--green)':'var(--amber)'}">${s.consistRatio.toFixed(1)}% / máx ${consist}% ${s.consistOk?'✓':'⚠'}</strong></div>
+        <div style="padding:10px 12px;border-radius:var(--r);background:${s.safeDayLimit>=300?'rgba(62,207,142,0.08)':s.safeDayLimit>=150?'rgba(255,179,71,0.08)':'rgba(255,87,87,0.08)'};border:1px solid ${s.safeDayLimit>=300?'rgba(62,207,142,0.2)':s.safeDayLimit>=150?'rgba(255,179,71,0.2)':'rgba(255,87,87,0.2)'}">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Límite seguro de ganancia hoy</div>
+          <div style="font-family:var(--font-head);font-size:26px;font-weight:700;color:${s.safeDayLimit>=300?'var(--green)':s.safeDayLimit>=150?'var(--amber)':'var(--red)'}">$${s.safeDayLimit.toFixed(0)}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px">Si superas este monto, la meta de retiro sube proporcionalmente</div>
+        </div>
+        ${!s.consistOk?`<div style="margin-top:8px;font-size:11px;color:var(--amber);padding:7px;background:rgba(255,179,71,0.1);border-radius:var(--r)">⚠ Necesitas $${s.minProfitForWD.toFixed(0)} de profit total para cumplir la regla</div>`:''}
       </div>
     </div>
     <div class="grid2 mt12">
@@ -1135,11 +1162,11 @@ function saveTrade(){
 function delTrade(id){if(!confirm('¿Eliminar?'))return;S.trades=S.trades.filter(t=>t.id!==id);save();renderAll();}
 
 /* ===== ACCOUNT FORM ===== */
-function openAddAcct(){editAId=null;document.getElementById('acct-modal-title').textContent='Nueva cuenta';document.getElementById('a-id').value='';['a-name','a-firm','a-bal','a-maxdd-usd','a-dailydd-usd','a-wd-target','a-wd-days','a-consist','a-start'].forEach(i=>document.getElementById(i).value='');document.getElementById('a-color').value='#c8f542';document.getElementById('a-type').value='pa';document.getElementById('a-status').value='active';openModal('modal-acct');}
-function openEditAcct(id){const a=S.accounts.find(x=>x.id===id);if(!a)return;document.getElementById('acct-modal-title').textContent='Editar cuenta';document.getElementById('a-id').value=id;document.getElementById('a-name').value=a.name||'';document.getElementById('a-firm').value=a.firm||'';document.getElementById('a-bal').value=a.bal||'';document.getElementById('a-maxdd-usd').value=a.maxddUsd||'';document.getElementById('a-dailydd-usd').value=a.dailyddUsd||'';document.getElementById('a-wd-target').value=a.wdTarget||'';document.getElementById('a-wd-days').value=a.wdDays||'';document.getElementById('a-consist').value=a.consist||'';document.getElementById('a-start').value=a.start||'';document.getElementById('a-color').value=a.color||'#c8f542';document.getElementById('a-type').value=a.type||'pa';document.getElementById('a-status').value=a.status||'active';openModal('modal-acct');}
+function openAddAcct(){editAId=null;document.getElementById('acct-modal-title').textContent='Nueva cuenta';document.getElementById('a-id').value='';['a-name','a-firm','a-bal','a-maxdd-usd','a-dailydd-usd','a-wd-target','a-wd-days','a-consist','a-start'].forEach(i=>document.getElementById(i).value='');document.getElementById('a-color').value='#c8f542';document.getElementById('a-type').value='pa';document.getElementById('a-status').value='active';document.getElementById('a-payout-cycle').value='1';openModal('modal-acct');}
+function openEditAcct(id){const a=S.accounts.find(x=>x.id===id);if(!a)return;document.getElementById('acct-modal-title').textContent='Editar cuenta';document.getElementById('a-id').value=id;document.getElementById('a-name').value=a.name||'';document.getElementById('a-firm').value=a.firm||'';document.getElementById('a-bal').value=a.bal||'';document.getElementById('a-maxdd-usd').value=a.maxddUsd||'';document.getElementById('a-dailydd-usd').value=a.dailyddUsd||'';document.getElementById('a-wd-target').value=a.wdTarget||'';document.getElementById('a-wd-days').value=a.wdDays||'';document.getElementById('a-consist').value=a.consist||'';document.getElementById('a-start').value=a.start||'';document.getElementById('a-color').value=a.color||'#c8f542';document.getElementById('a-type').value=a.type||'pa';document.getElementById('a-status').value=a.status||'active';document.getElementById('a-payout-cycle').value=a.payoutCycle||1;openModal('modal-acct');}
 function saveAcct(){
   const id=document.getElementById('a-id').value||Date.now().toString();
-  const a={id,name:document.getElementById('a-name').value.trim(),firm:document.getElementById('a-firm').value.trim(),bal:parseFloat(document.getElementById('a-bal').value)||0,type:document.getElementById('a-type').value,maxddUsd:parseFloat(document.getElementById('a-maxdd-usd').value)||0,dailyddUsd:parseFloat(document.getElementById('a-dailydd-usd').value)||0,wdTarget:parseFloat(document.getElementById('a-wd-target').value)||0,wdDays:parseInt(document.getElementById('a-wd-days').value)||8,consist:parseFloat(document.getElementById('a-consist').value)||50,start:document.getElementById('a-start').value,color:document.getElementById('a-color').value,status:document.getElementById('a-status').value};
+  const a={id,name:document.getElementById('a-name').value.trim(),firm:document.getElementById('a-firm').value.trim(),bal:parseFloat(document.getElementById('a-bal').value)||0,type:document.getElementById('a-type').value,maxddUsd:parseFloat(document.getElementById('a-maxdd-usd').value)||0,dailyddUsd:parseFloat(document.getElementById('a-dailydd-usd').value)||0,wdTarget:parseFloat(document.getElementById('a-wd-target').value)||0,wdDays:parseInt(document.getElementById('a-wd-days').value)||8,consist:parseFloat(document.getElementById('a-consist').value)||50,payoutCycle:parseInt(document.getElementById('a-payout-cycle').value)||1,start:document.getElementById('a-start').value,color:document.getElementById('a-color').value,status:document.getElementById('a-status').value};
   if(!a.name){alert('Ingresa un nombre');return;}
   const i=S.accounts.findIndex(x=>x.id===id);if(i>=0)S.accounts[i]=a;else S.accounts.push(a);
   save();closeModal('modal-acct');renderAll();
