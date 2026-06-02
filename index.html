@@ -246,7 +246,7 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
   </div>
 
   <div class="form-sec">
-    <div class="form-sec-title">P&L por cuenta</div>
+    <div class="form-sec-title">Cuentas activas en este trade</div>
     <div id="pnl-accts"></div>
   </div>
 
@@ -394,7 +394,10 @@ function showAcct(id){
 
 /* ===== ACCOUNT STATS ===== */
 function acctStats(a){
-  const ts = S.trades.filter(t=>(t.pnl||{})[a.id]!==undefined);
+  const ts = S.trades.filter(t=>{
+    if(t.accounts && t.accounts.length) return t.accounts.includes(a.id);
+    return (t.pnl||{})[a.id]!==undefined;
+  });
   const pnl = ts.reduce((s,t)=>s+(t.pnl[a.id]||0),0);
   const bal = (a.bal||0)+pnl;
   const wins = ts.filter(t=>t.result==='win').length;
@@ -522,7 +525,10 @@ function renderDashCharts(ts, avgPnls){
 function renderAcctPage(id){
   const a=S.accounts.find(x=>x.id===id); if(!a)return;
   const s=acctStats(a);
-  const ts=S.trades.filter(t=>(t.pnl||{})[id]!==undefined).sort((a2,b)=>b.date.localeCompare(a2.date));
+  const ts=S.trades.filter(t=>{
+    if(t.accounts && t.accounts.length) return t.accounts.includes(id);
+    return (t.pnl||{})[id]!==undefined;
+  }).sort((a2,b)=>b.date.localeCompare(a2.date));
   const ddColor=s.ddPct<50?'var(--green)':s.ddPct<75?'var(--amber)':'var(--red)';
   const wdTarget=a.wdTarget||0;
   const consist=a.consist||50;
@@ -696,7 +702,7 @@ function openTradeForm(id){
     selEmoVal=t.emotion||''; selConfVal=t.confidence||0;
     if(selEmoVal) document.querySelectorAll('.emo').forEach(b=>{if(b.textContent===selEmoVal)b.classList.add('sel');});
     document.querySelectorAll('.cpip').forEach((b,i)=>{if(i<selConfVal)b.classList.add('sel');});
-    renderPnlInputs(t.pnl||{});
+    renderPnlInputs(t.pnl||{}, t.accounts||[]);
   } else {
     document.getElementById('form-title').textContent='Registrar trade';
     document.getElementById('save-btn').textContent='Guardar trade';
@@ -713,10 +719,32 @@ function openTradeForm(id){
   openModal('modal-trade');
 }
 
-function renderPnlInputs(existing){
+function renderPnlInputs(existing, activeAccts){
   const el=document.getElementById('pnl-accts');
   if(!S.accounts.length){el.innerHTML='<div style="font-size:11px;color:var(--text3)">Agrega cuentas desde el sidebar para registrar P&L individual.</div>';return;}
-  el.innerHTML=`<div class="fgrid">${S.accounts.map(a=>`<div class="fg"><label style="display:flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:${a.color};display:inline-block"></span>${a.name}</label><input type="number" id="pnl-${a.id}" step="0.01" placeholder="0.00" value="${(existing[a.id]??'')}"></div>`).join('')}</div>`;
+  // activeAccts = array of account ids that were active in this trade
+  const active = activeAccts || Object.keys(existing);
+  el.innerHTML=S.accounts.map(a=>{
+    const isActive = active.includes(a.id) || existing[a.id]!==undefined;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <input type="checkbox" id="chk-${a.id}" ${isActive?'checked':''} onchange="togglePnlField('${a.id}')" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:6px;min-width:130px">
+        <span style="width:7px;height:7px;border-radius:50%;background:${a.color};display:inline-block"></span>
+        <label for="chk-${a.id}" style="font-size:12px;color:var(--text);cursor:pointer">${a.name}</label>
+      </div>
+      <div id="pnl-field-${a.id}" style="flex:1;${isActive?'':'display:none'}">
+        <input type="number" id="pnl-${a.id}" step="0.01" placeholder="P&L en $" value="${existing[a.id]??''}" style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--font-mono);font-size:13px;padding:6px 9px;border-radius:var(--r);outline:none">
+      </div>
+      ${!isActive?`<div style="font-size:11px;color:var(--text3)">no aplica</div>`:''}
+    </div>`;
+  }).join('');
+}
+function togglePnlField(id){
+  const chk=document.getElementById('chk-'+id);
+  const field=document.getElementById('pnl-field-'+id);
+  const noAplica=field.nextElementSibling;
+  if(chk.checked){ field.style.display='flex'; if(noAplica)noAplica.style.display='none'; }
+  else { field.style.display='none'; document.getElementById('pnl-'+id).value=''; if(noAplica)noAplica.style.display='block'; }
 }
 
 function selEmo(btn,val){ document.querySelectorAll('.emo').forEach(b=>b.classList.remove('sel')); btn.classList.add('sel'); selEmoVal=val; }
@@ -724,7 +752,15 @@ function selConf(n){ selConfVal=n; document.querySelectorAll('.cpip').forEach((b
 
 function saveTrade(){
   const pnl={};
-  S.accounts.forEach(a=>{ const v=parseFloat(document.getElementById('pnl-'+a.id)?.value||'0')||0; pnl[a.id]=v; });
+  const activeAccounts=[];
+  S.accounts.forEach(a=>{
+    const chk=document.getElementById('chk-'+a.id);
+    if(chk&&chk.checked){
+      const v=parseFloat(document.getElementById('pnl-'+a.id)?.value||'0')||0;
+      pnl[a.id]=v;
+      activeAccounts.push(a.id);
+    }
+  });
   const t={
     id:editTId||Date.now().toString(),
     date:document.getElementById('f-date').value,
@@ -747,7 +783,8 @@ function saveTrade(){
     confidence:selConfVal,
     followed:document.getElementById('f-followed').value,
     notes:document.getElementById('f-notes').value.trim(),
-    pnl
+    pnl,
+    accounts:activeAccounts
   };
   if(!t.date){alert('Ingresa una fecha');return;}
   if(editTId){ const i=S.trades.findIndex(x=>x.id===editTId); if(i>=0)S.trades[i]=t; }
