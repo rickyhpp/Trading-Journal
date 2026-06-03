@@ -287,12 +287,12 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
   <div class="form-sec">
     <div class="form-sec-title">Checklist pre-trade</div>
     <div class="checklist" id="pre-checklist">
-      <div class="check-item" onclick="toggleCheck(this)"><input type="checkbox"><label>¿El saldo EOD de ayer está en zona segura?</label></div>
-      <div class="check-item" onclick="toggleCheck(this)"><input type="checkbox"><label>¿Identifiqué el máximo y mínimo de apertura?</label></div>
-      <div class="check-item" onclick="toggleCheck(this)"><input type="checkbox"><label>¿La vela de ruptura tiene mecha mínima?</label></div>
-      <div class="check-item" onclick="toggleCheck(this)"><label>¿Calculé contratos = $270 / valor_vela?</label><input type="checkbox"></div>
-      <div class="check-item" onclick="toggleCheck(this)"><input type="checkbox"><label>¿Configuré el SL ANTES de confirmar la orden?</label></div>
-      <div class="check-item" onclick="toggleCheck(this)"><input type="checkbox"><label>¿El TP está puesto en la plataforma?</label></div>
+      <div class="check-item"><input type="checkbox" id="chk-pre-1" onchange="updateChecklist()"><label for="chk-pre-1">¿El saldo EOD de ayer está en zona segura?</label></div>
+      <div class="check-item"><input type="checkbox" id="chk-pre-2" onchange="updateChecklist()"><label for="chk-pre-2">¿Identifiqué el máximo y mínimo de apertura?</label></div>
+      <div class="check-item"><input type="checkbox" id="chk-pre-3" onchange="updateChecklist()"><label for="chk-pre-3">¿La vela de ruptura tiene mecha mínima?</label></div>
+      <div class="check-item"><input type="checkbox" id="chk-pre-4" onchange="updateChecklist()"><label for="chk-pre-4">¿Calculé contratos = $270 / valor_vela?</label></div>
+      <div class="check-item"><input type="checkbox" id="chk-pre-5" onchange="updateChecklist()"><label for="chk-pre-5">¿Configuré el SL ANTES de confirmar la orden?</label></div>
+      <div class="check-item"><input type="checkbox" id="chk-pre-6" onchange="updateChecklist()"><label for="chk-pre-6">¿El TP está puesto en la plataforma?</label></div>
     </div>
     <div id="checklist-warn" style="display:none;font-size:11px;color:var(--amber);margin-top:6px">⚠ No todos los puntos del checklist están marcados</div>
   </div>
@@ -1041,7 +1041,8 @@ function openTradeForm(id){
   editTId=id;selEmoVal='';selConfVal=0;
   document.querySelectorAll('.emo').forEach(b=>b.classList.remove('sel'));
   document.querySelectorAll('.cpip').forEach(b=>b.classList.remove('sel'));
-  document.querySelectorAll('#pre-checklist .check-item').forEach(item=>{item.querySelector('input').checked=false;item.classList.remove('checked');});
+  document.querySelectorAll('#pre-checklist input[type=checkbox]').forEach(cb=>{cb.checked=false;});
+  document.querySelectorAll('#pre-checklist .check-item').forEach(item=>item.classList.remove('checked'));
   document.getElementById('checklist-warn').style.display='none';
   if(id){
     const t=S.trades.find(x=>x.id===id);if(!t)return;
@@ -1110,10 +1111,12 @@ function togglePnlField(id){
   else{field.style.display='none';document.getElementById('pnl-'+id).value='';}
 }
 
-function toggleCheck(item){
-  const cb=item.querySelector('input[type=checkbox]');
-  cb.checked=!cb.checked;
-  item.classList.toggle('checked',cb.checked);
+function updateChecklist(){
+  const items=document.querySelectorAll('#pre-checklist .check-item');
+  items.forEach(item=>{
+    const cb=item.querySelector('input[type=checkbox]');
+    item.classList.toggle('checked', cb.checked);
+  });
   const all=document.querySelectorAll('#pre-checklist input[type=checkbox]');
   const allChecked=[...all].every(c=>c.checked);
   document.getElementById('checklist-warn').style.display=allChecked?'none':'block';
