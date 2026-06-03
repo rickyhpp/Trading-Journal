@@ -227,6 +227,12 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
     <div class="card mb0"><div class="card-title">Rachas (wins/losses consecutivos)</div><div id="streak-wrap"></div></div>
   </div>
 
+  <!-- ROW heatmap -->
+  <div class="card mt12 mb0">
+    <div class="card-title">Heatmap — hora de entrada × día de la semana</div>
+    <div id="heatmap-wrap"></div>
+  </div>
+
   <!-- ROW 5: zona analysis + SL dist -->
   <div class="grid2 mt12">
     <div class="card mb0"><div class="card-title">Análisis por zona ORB</div><div id="zona-wrap"></div></div>
@@ -849,6 +855,8 @@ function renderAnalytics(){
   renderCalendar();
   // streaks
   renderStreaks();
+  // heatmap
+  renderHeatmap();
   // zona analysis
   const zones=['Ideal','Promedio','Grande','Evitar'];
   const zm={};
@@ -880,7 +888,6 @@ function renderCalendar(){
   if(!ts.length){document.getElementById('cal-wrap').innerHTML='<div class="empty">Sin datos</div>';return;}
   const byDay={};
   ts.forEach(t=>{byDay[t.date]=(byDay[t.date]||0)+avgPnl(t);});
-  // get last 2 months
   const now=new Date();
   const months=[];
   for(let i=1;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push({year:d.getFullYear(),month:d.getMonth()});}
@@ -890,26 +897,38 @@ function renderCalendar(){
     const daysInMonth=new Date(year,month+1,0).getDate();
     const firstDay=new Date(year,month,1).getDay();
     const startOffset=(firstDay+6)%7;
-    html+=`<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--text3);margin-bottom:6px;text-transform:capitalize">${monthName}</div>`;
+    html+=`<div style="margin-bottom:16px">`;
+    html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:6px;text-transform:capitalize">${monthName}</div>`;
     html+=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">`;
-    ['L','M','X','J','V','S','D'].forEach(d=>{html+=`<div style="font-size:9px;color:var(--text3);text-align:center;padding:2px">${d}</div>`;});
+    ['L','M','X','J','V','S','D'].forEach(d=>{html+=`<div style="font-size:9px;color:var(--text3);text-align:center;padding:2px 0">${d}</div>`;});
     for(let i=0;i<startOffset;i++)html+=`<div></div>`;
     for(let d=1;d<=daysInMonth;d++){
       const dateStr=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       const v=byDay[dateStr];
-      let bg='var(--bg3)';let fc='var(--text3)';
+      let bg='var(--bg3)';let fc='var(--text3)';let valTxt='';
       if(v!==undefined){
-        if(v>300)bg='rgba(62,207,142,0.7)';
-        else if(v>0)bg='rgba(62,207,142,0.35)';
-        else if(v>-300)bg='rgba(255,87,87,0.35)';
-        else bg='rgba(255,87,87,0.7)';
-        fc='var(--text)';
+        if(v>300){bg='rgba(62,207,142,0.75)';fc='#0a0a0b';}
+        else if(v>0){bg='rgba(62,207,142,0.35)';fc='var(--green)';}
+        else if(v>-300){bg='rgba(255,87,87,0.35)';fc='var(--red)';}
+        else{bg='rgba(255,87,87,0.75)';fc='#0a0a0b';}
+        // show value if cell is wide enough — use abbreviated
+        const abs=Math.abs(v);
+        valTxt=abs>=1000?`${(v/1000).toFixed(1)}k`:(v>=0?'+':'')+Math.round(v);
       }
-      html+=`<div style="aspect-ratio:1;background:${bg};border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;color:${fc};cursor:default;position:relative" title="${dateStr}${v!==undefined?' · $'+(v>=0?'+':'')+v.toFixed(0):''}">${d}</div>`;
+      html+=`<div style="background:${bg};border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3px 1px;min-height:34px;cursor:default" title="${dateStr}${v!==undefined?' · $'+(v>=0?'+':'')+v.toFixed(0):''}">
+        <span style="font-size:9px;color:${fc};line-height:1.2">${d}</span>
+        ${v!==undefined?`<span style="font-size:8px;color:${fc};font-weight:600;line-height:1.2">${valTxt}</span>`:''}
+      </div>`;
     }
     html+=`</div></div>`;
   });
-  document.getElementById('cal-wrap').innerHTML=html+`<div style="display:flex;gap:10px;margin-top:6px;font-size:10px;color:var(--text3)"><span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;background:rgba(62,207,142,0.7);border-radius:2px;display:inline-block"></span>>$300</span><span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;background:rgba(62,207,142,0.35);border-radius:2px;display:inline-block"></span>Win</span><span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;background:rgba(255,87,87,0.35);border-radius:2px;display:inline-block"></span>Loss</span><span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;background:rgba(255,87,87,0.7);border-radius:2px;display:inline-block"></span><$300</span></div>`;
+  html+=`<div style="display:flex;gap:10px;margin-top:4px;flex-wrap:wrap">
+    <span style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text3)"><span style="width:10px;height:10px;background:rgba(62,207,142,0.75);border-radius:2px;display:inline-block"></span>>$300</span>
+    <span style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text3)"><span style="width:10px;height:10px;background:rgba(62,207,142,0.35);border-radius:2px;display:inline-block"></span>Win</span>
+    <span style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text3)"><span style="width:10px;height:10px;background:rgba(255,87,87,0.35);border-radius:2px;display:inline-block"></span>Loss</span>
+    <span style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text3)"><span style="width:10px;height:10px;background:rgba(255,87,87,0.75);border-radius:2px;display:inline-block"></span><$300</span>
+  </div>`;
+  document.getElementById('cal-wrap').innerHTML=html;
 }
 
 function renderStreaks(){
@@ -946,15 +965,84 @@ function renderStreaks(){
     <div style="font-size:10px;color:var(--text3);margin-top:4px">Últimos ${Math.min(30,ts.length)} trades</div>`;
 }
 
-/* ===== SIZING PAGE ===== */
+function renderHeatmap(){
+  const ts=S.trades.filter(t=>t.timeIn&&t.date);
+  const el=document.getElementById('heatmap-wrap');
+  if(!ts.length){el.innerHTML='<div class="empty">Sin datos de hora de entrada — registra la hora en tus trades</div>';return;}
+  const days=['Lun','Mar','Mié','Jue','Vie'];
+  const hourSet=new Set();
+  ts.forEach(t=>{
+    const[h,m]=t.timeIn.split(':').map(Number);
+    const bucket=`${String(h).padStart(2,'0')}:${m<15?'00':m<30?'15':m<45?'30':'45'}`;
+    hourSet.add(bucket);
+  });
+  const hours=[...hourSet].sort();
+  if(!hours.length){el.innerHTML='<div class="empty">Sin horas registradas</div>';return;}
+  const map={};
+  hours.forEach(h=>{map[h]={};for(let i=0;i<5;i++)map[h][i]={w:0,t:0,pnl:0};});
+  ts.forEach(t=>{
+    const dow=new Date(t.date+'T12:00:00').getDay()-1;
+    if(dow<0||dow>4)return;
+    const[h,m]=t.timeIn.split(':').map(Number);
+    const bucket=`${String(h).padStart(2,'0')}:${m<15?'00':m<30?'15':m<45?'30':'45'}`;
+    if(!map[bucket])return;
+    map[bucket][dow].t++;
+    if(t.result==='win')map[bucket][dow].w++;
+    map[bucket][dow].pnl+=avgPnl(t);
+  });
+  const cellW=80;const cellH=48;
+  let html=`<div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:4px;font-size:11px;margin-bottom:10px">`;
+  html+=`<tr><th style="width:50px;color:var(--text3);font-weight:400;font-size:10px;text-align:right;padding:2px 8px 2px 0">Hora ↓ Día →</th>`;
+  days.forEach(d=>html+=`<th style="width:${cellW}px;color:var(--text3);font-weight:500;font-size:12px;text-align:center;padding:6px 4px">${d}</th>`);
+  html+=`</tr>`;
+  hours.forEach(hour=>{
+    html+=`<tr><td style="color:var(--text3);font-size:10px;text-align:right;padding:2px 8px 2px 0;white-space:nowrap;vertical-align:middle">${hour}</td>`;
+    for(let dow=0;dow<5;dow++){
+      const cell=map[hour][dow];
+      const wr=cell.t?cell.w/cell.t:null;
+      const avgP=cell.t?cell.pnl/cell.t:0;
+      let bg='var(--bg3)';let fc='var(--text3)';
+      let intensity=1;
+      if(cell.t>0){
+        intensity=Math.min(1,0.35+cell.t*0.2);
+        if(wr>=0.7){bg=`rgba(62,207,142,${(0.6*intensity+0.2).toFixed(2)})`;fc=intensity>0.7?'#0a0a0b':'var(--green)';}
+        else if(wr>=0.5){bg=`rgba(62,207,142,${(0.3*intensity+0.1).toFixed(2)})`;fc='var(--green)';}
+        else if(wr>=0.3){bg=`rgba(255,87,87,${(0.3*intensity+0.1).toFixed(2)})`;fc='var(--red)';}
+        else{bg=`rgba(255,87,87,${(0.6*intensity+0.2).toFixed(2)})`;fc=intensity>0.7?'#0a0a0b':'var(--red)';}
+      }
+      const tooltip=cell.t>0?`${days[dow]} ${hour}: ${cell.w}W / ${cell.t-cell.w}L · WR ${wr!==null?(wr*100).toFixed(0):'—'}% · avg $${avgP.toFixed(0)}`:'Sin trades';
+      html+=`<td style="width:${cellW}px;height:${cellH}px;background:${bg};border-radius:8px;text-align:center;vertical-align:middle;cursor:default" title="${tooltip}">`;
+      if(cell.t>0){
+        html+=`<div style="color:${fc};font-size:11px;font-weight:700;line-height:1.3">${(wr*100).toFixed(0)}%</div>`;
+        html+=`<div style="color:${fc};font-size:9px;opacity:0.9">${cell.w}W · ${cell.t-cell.w}L</div>`;
+        html+=`<div style="color:${fc};font-size:9px;opacity:0.85">${avgP>=0?'+':''}$${Math.round(avgP)}</div>`;
+      }else{
+        html+=`<div style="color:var(--text3);font-size:9px">—</div>`;
+      }
+      html+=`</td>`;
+    }
+    html+=`</tr>`;
+  });
+  html+=`</table></div>`;
+  html+=`<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:10px;color:var(--text3);align-items:center">
+    <span style="font-weight:500">Win rate:</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:rgba(62,207,142,0.8);border-radius:3px;display:inline-block"></span>≥70%</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:rgba(62,207,142,0.4);border-radius:3px;display:inline-block"></span>50–70%</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:rgba(255,87,87,0.4);border-radius:3px;display:inline-block"></span>30–50%</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:rgba(255,87,87,0.8);border-radius:3px;display:inline-block"></span><30%</span>
+    <span style="color:var(--text3);margin-left:4px">· Celda más intensa = más trades en esa franja</span>
+  </div>`;
+  el.innerHTML=html;
+}
 function renderSizingPage(){
-  // table
+  // table — vela($) is already the dollar risk per contract (price_move × $2/point)
+  // SL real = contracts × vela, TP = SL × 1.4
   const tbody=document.getElementById('sizing-tbody');
   if(tbody)tbody.innerHTML=SIZING.map(row=>{
-    const sl=(row.f1*row.vela*2).toFixed(0);
-    const tp=((row.f1*row.vela*2)*1.4).toFixed(0);
+    const slReal=(row.f1*row.vela).toFixed(0);
+    const tpReal=((row.f1*row.vela)*1.4).toFixed(0);
     const zc=row.zone==='Ideal'?'zone-ideal':row.zone==='Promedio'?'zone-promedio':row.zone==='Grande'?'zone-grande':row.zone==='Evitar'?'zone-evitar':'zone-max';
-    return`<tr><td>$${row.vela==='999'?'>$270':row.vela}</td><td style="font-weight:600;color:var(--text)">${row.f1}</td><td>$${sl}</td><td>$${tp}</td><td><span class="zone ${zc}">${row.zone}</span></td></tr>`;
+    return`<tr><td>$${row.vela===999?'>$270':row.vela}</td><td style="font-weight:600;color:var(--text)">${row.f1}</td><td>$${slReal}</td><td>$${tpReal}</td><td><span class="zone ${zc}">${row.zone}</span></td></tr>`;
   }).join('');
   // saldo zones
   const el=document.getElementById('saldo-zones');
@@ -981,11 +1069,11 @@ function calcSizing(){
   const ratio=parseFloat(document.getElementById('calc-ratio')?.value)||1.4;
   const el=document.getElementById('calc-result');
   if(!entry||!sl){el.innerHTML='<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px">Ingresa entrada y SL para calcular</div>';return;}
-  const velaDolars=Math.abs(entry-sl)*2; // MNQ $2 per point
+  const velaDolars=Math.abs(entry-sl)*2; // MNQ: each point = $2
   const contracts=Math.max(1,Math.floor(risk/velaDolars));
   const slReal=contracts*velaDolars;
-  const tpPuntos=(entry-sl)*ratio; // in price units
-  const tpPrice=entry>sl?entry+Math.abs(tpPuntos):entry-Math.abs(tpPuntos);
+  const tpOffset=Math.abs(entry-sl)*ratio;
+  const tpPrice=entry>sl?entry+tpOffset:entry-tpOffset;
   const tpDolars=slReal*ratio;
   const zone=getZone(velaDolars);
   const zc=zone==='Ideal'?'zone-ideal':zone==='Promedio'?'zone-promedio':zone==='Grande'?'zone-grande':zone==='Evitar'?'zone-evitar':'zone-max';
