@@ -616,13 +616,14 @@ function acctStats(a){
 }
 
 function getSaldoZone(bal,initial){
+  if(!initial||initial<100)return{label:'—',color:'var(--text3)',slMax:270,action:'Configura el balance inicial de la cuenta.'};
   const safetyNet=initial+2100;
-  if(bal>=safetyNet)return{label:'SAFETY NET',color:'var(--accent)',slMax:270,action:'Operar normal. Retiros disponibles.'};
+  if(bal>=safetyNet)return{label:'SAFETY NET ✓',color:'var(--accent)',slMax:270,action:'Operar normal. Retiros disponibles.'};
   if(bal>=initial+1000)return{label:'ZONA SEGURA',color:'var(--green)',slMax:270,action:'Operar normal. Prioridad: llegar a safety net.'};
   if(bal>=initial+500)return{label:'ALERTA AMARILLA',color:'var(--amber)',slMax:150,action:'Reducir sizing. Ser más selectivo con el setup.'};
-  if(bal>=initial+200)return{label:'ALERTA ROJA',color:'var(--red)',slMax:100,action:'Solo entrar si el setup es A+. Considerar no operar.'};
+  if(bal>=initial+200)return{label:'ALERTA ROJA',color:'var(--red)',slMax:100,action:'Solo setup A+. Considerar no operar.'};
   if(bal>initial-2000)return{label:'NO OPERAR',color:'var(--red)',slMax:0,action:'Día libre. Proteger la cuenta. Revisar psicología.'};
-  return{label:'CUENTA ELIMINADA',color:'#444',slMax:0,action:'Max drawdown alcanzado.'};
+  return{label:'CUENTA ELIMINADA',color:'#444',slMax:0,action:'Max drawdown alcanzado. Cuenta cerrada por la firma.'};
 }
 
 /* ===== MASTER DASHBOARD ===== */
