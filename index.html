@@ -162,7 +162,10 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
   <div class="page-header">
     <div class="ph-row">
       <div><div class="page-title">Dashboard</div><div class="page-sub" id="master-sub">—</div></div>
-      <button class="btn btn-p btn-sm" onclick="openTradeForm(null)">+ Trade</button>
+      <div class="flex gap8">
+        <button class="btn btn-g btn-sm" onclick="openImportModal()">↑ Importar CSV</button>
+        <button class="btn btn-p btn-sm" onclick="openTradeForm(null)">+ Trade</button>
+      </div>
     </div>
   </div>
   <div class="metrics" id="master-metrics"></div>
@@ -283,13 +286,9 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
 <div id="page-ai" class="page">
   <div class="page-header">
     <div class="ph-row">
-      <div>
-        <div class="page-title">AI Analyst ✦</div>
-        <div class="page-sub">Análisis inteligente de tu trading — powered by Claude</div>
-      </div>
+      <div><div class="page-title">AI Analyst ✦</div><div class="page-sub">Análisis inteligente de tu trading — powered by Claude</div></div>
     </div>
   </div>
-
   <!-- API Key banner -->
   <div id="ai-key-banner" class="card" style="margin-bottom:14px;border-color:rgba(200,245,66,0.2);background:rgba(200,245,66,0.04)">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -300,57 +299,51 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
       <div style="display:flex;gap:6px;align-items:center;flex:1;min-width:260px">
         <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 10px;border-radius:var(--r);outline:none">
         <button class="btn btn-p btn-sm" onclick="saveApiKey()">Guardar</button>
-        <button class="btn btn-g btn-sm" onclick="toggleShowKey()" id="show-key-btn" title="Mostrar/ocultar">👁</button>
+        <button class="btn btn-g btn-sm" onclick="toggleShowKey()" title="Mostrar/ocultar">👁</button>
       </div>
     </div>
     <div id="api-key-status" style="margin-top:8px;font-size:11px;display:none"></div>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+  <!-- Quick buttons -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
     <button class="btn btn-g btn-sm" onclick="aiQuickAnalysis('general')">📊 Análisis general</button>
     <button class="btn btn-g btn-sm" onclick="aiQuickAnalysis('weekly')">📅 Reporte semanal</button>
     <button class="btn btn-g btn-sm" onclick="aiQuickAnalysis('plan')">🎯 ¿Cómo voy vs el plan?</button>
     <button class="btn btn-g btn-sm" onclick="aiQuickAnalysis('withdrawal')">💰 ¿Puedo retirar?</button>
-    <button class="btn btn-g btn-sm" onclick="aiQuickAnalysis('psychology')">🧠 Análisis psicológico</button>
-    <button class="btn btn-g btn-sm" onclick="aiQuickAnalysis('risk')">⚠️ Gestión de riesgo</button>
+    <button class="btn btn-g btn-sm" onclick="aiQuickAnalysis('psychology')">🧠 Psicología</button>
+    <button class="btn btn-g btn-sm" onclick="aiQuickAnalysis('risk')">⚠️ Riesgo</button>
+    <button class="btn btn-g btn-sm" onclick="clearAiChat()" style="margin-left:auto">🗑 Limpiar</button>
   </div>
-
-  <!-- Chat area -->
-  <div class="card mb0" style="padding:0;overflow:hidden">
-    <!-- Messages -->
-    <div id="ai-messages" style="min-height:380px;max-height:520px;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px">
-      <div id="ai-welcome" style="text-align:center;padding:40px 20px">
-        <div style="font-size:28px;margin-bottom:12px">✦</div>
-        <div style="font-family:var(--font-head);font-size:16px;font-weight:600;margin-bottom:8px">Tu analista de trading personal</div>
-        <div style="font-size:12px;color:var(--text3);max-width:400px;margin:0 auto;line-height:1.8">
-          Hazme cualquier pregunta sobre tus trades, estrategia o cuentas.<br>
-          También puedes adjuntar una foto de tu chart para análisis visual.
-        </div>
-        <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center">
+  <!-- Chat container full height -->
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);display:flex;flex-direction:column;height:calc(100vh - 300px);min-height:480px">
+    <div id="ai-messages" style="flex:1;overflow-y:auto;padding:24px 32px;display:flex;flex-direction:column;gap:16px">
+      <div id="ai-welcome" style="text-align:center;padding:60px 20px">
+        <div style="font-size:32px;margin-bottom:14px">✦</div>
+        <div style="font-family:var(--font-head);font-size:18px;font-weight:600;margin-bottom:8px">Tu analista de trading personal</div>
+        <div style="font-size:12px;color:var(--text3);max-width:480px;margin:0 auto;line-height:1.9">Hazme cualquier pregunta sobre tus trades, estrategia o cuentas.<br>También puedes adjuntar una foto de tu chart para análisis visual.</div>
+        <div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:600px;margin:20px auto 0">
           <button class="emo" onclick="setQuestion('¿Cuál es mi mayor debilidad actual?')">¿Mi mayor debilidad?</button>
           <button class="emo" onclick="setQuestion('¿Hay patrones en mis losses que no estoy viendo?')">Patrones en losses</button>
           <button class="emo" onclick="setQuestion('¿Debería escalar a más contratos ya?')">¿Escalar contratos?</button>
           <button class="emo" onclick="setQuestion('Analiza mi consistencia psicológica')">Consistencia psicológica</button>
+          <button class="emo" onclick="setQuestion('Dame un análisis pre-market para hoy')">Análisis pre-market</button>
+          <button class="emo" onclick="setQuestion('¿Qué día de la semana opero mejor?')">Mejor día de semana</button>
         </div>
       </div>
     </div>
-
-    <!-- Image preview -->
     <div id="ai-img-preview" style="display:none;padding:8px 20px;border-top:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:8px">
         <img id="ai-img-thumb" style="height:48px;border-radius:4px;object-fit:cover" alt="chart">
         <span style="font-size:11px;color:var(--text3)">Chart adjunto</span>
-        <button onclick="removeImage()" style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px">×</button>
+        <button onclick="removeImage()" style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;line-height:1">×</button>
       </div>
     </div>
-
-    <!-- Input area -->
-    <div style="padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:flex-end">
-      <label for="ai-img-input" style="cursor:pointer;padding:8px;border:1px solid var(--border2);border-radius:var(--r);color:var(--text3);font-size:16px;display:flex;align-items:center;transition:all .15s;flex-shrink:0" title="Adjuntar chart">
-        📎
-        <input type="file" id="ai-img-input" accept="image/*" style="display:none" onchange="handleImageUpload(this)">
+    <div style="padding:16px 20px;border-top:1px solid var(--border);display:flex;gap:10px;align-items:flex-end">
+      <label for="ai-img-input" style="cursor:pointer;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--r);color:var(--text3);font-size:16px;display:flex;align-items:center;background:var(--bg3);flex-shrink:0" title="Adjuntar chart">
+        📎<input type="file" id="ai-img-input" accept="image/*" style="display:none" onchange="handleImageUpload(this)">
       </label>
-      <textarea id="ai-input" placeholder="Pregunta algo sobre tus trades, estrategia o cuentas..." style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--font-mono);font-size:13px;padding:8px 12px;border-radius:var(--r);outline:none;resize:none;min-height:40px;max-height:120px;line-height:1.5" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAiMessage()}" oninput="this.style.height='40px';this.style.height=Math.min(120,this.scrollHeight)+'px'"></textarea>
-      <button class="btn btn-p" onclick="sendAiMessage()" style="flex-shrink:0;padding:8px 16px" id="ai-send-btn">Enviar</button>
+      <textarea id="ai-input" placeholder="Pregunta algo sobre tus trades... (Enter para enviar, Shift+Enter para nueva línea)" style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:var(--font-mono);font-size:13px;padding:9px 14px;border-radius:var(--r);outline:none;resize:none;min-height:42px;max-height:140px;line-height:1.6" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAiMessage()}" oninput="this.style.height='42px';this.style.height=Math.min(140,this.scrollHeight)+'px'"></textarea>
+      <button class="btn btn-p" onclick="sendAiMessage()" style="flex-shrink:0;padding:10px 22px;align-self:flex-end" id="ai-send-btn">Enviar</button>
     </div>
   </div>
 </div>
@@ -503,6 +496,66 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
   <div class="flex gap8" style="margin-top:14px">
     <button class="btn btn-p" onclick="saveAcct()">Guardar</button>
     <button class="btn btn-g" onclick="closeModal('modal-acct')">Cancelar</button>
+  </div>
+</div>
+</div>
+
+<!-- MODAL IMPORT CSV -->
+<div class="modal-ov" id="modal-import">
+<div class="modal" style="width:720px">
+  <div class="modal-title">Importar trades desde Tradovate CSV</div>
+  <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Exporta desde Tradovate → Account → Reports → Trade History → Export. El sistema detecta automáticamente dirección, precios y P&L.</p>
+
+  <!-- Step 1: upload file -->
+  <div id="import-step-1">
+    <div style="border:2px dashed var(--border2);border-radius:var(--r2);padding:32px;text-align:center;cursor:pointer;transition:all .2s" id="csv-drop-zone" onclick="document.getElementById('csv-file-input').click()" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'" ondragleave="this.style.borderColor='var(--border2)'" ondrop="handleCsvDrop(event)">
+      <div style="font-size:28px;margin-bottom:8px">📂</div>
+      <div style="font-size:13px;color:var(--text2)">Arrastra el CSV aquí o haz clic para seleccionar</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">Archivo Performance_*.csv de Tradovate</div>
+      <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="handleCsvFile(this)">
+    </div>
+  </div>
+
+  <!-- Step 2: preview & assign -->
+  <div id="import-step-2" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:12px;color:var(--text2)" id="import-count"></div>
+      <button class="btn btn-g btn-sm" onclick="resetImport()">↺ Cambiar archivo</button>
+    </div>
+
+    <!-- Account assignment -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title">Asignar a cuenta(s)</div>
+      <p style="font-size:11px;color:var(--text3);margin-bottom:10px">Selecciona a qué cuenta(s) corresponden estos trades. El P&L del CSV se asignará a cada cuenta seleccionada.</p>
+      <div id="import-acct-checks" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+
+    <!-- Preview table -->
+    <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r2)">
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead style="position:sticky;top:0;background:var(--bg3)">
+          <tr>
+            <th style="padding:8px 10px;text-align:left;color:var(--text3);font-weight:400;border-bottom:1px solid var(--border)">Fecha</th>
+            <th style="padding:8px 10px;text-align:left;color:var(--text3);font-weight:400;border-bottom:1px solid var(--border)">Hora entrada</th>
+            <th style="padding:8px 10px;text-align:left;color:var(--text3);font-weight:400;border-bottom:1px solid var(--border)">Dir</th>
+            <th style="padding:8px 10px;text-align:left;color:var(--text3);font-weight:400;border-bottom:1px solid var(--border)">Contratos</th>
+            <th style="padding:8px 10px;text-align:left;color:var(--text3);font-weight:400;border-bottom:1px solid var(--border)">Entrada</th>
+            <th style="padding:8px 10px;text-align:left;color:var(--text3);font-weight:400;border-bottom:1px solid var(--border)">Salida</th>
+            <th style="padding:8px 10px;text-align:left;color:var(--text3);font-weight:400;border-bottom:1px solid var(--border)">P&L</th>
+            <th style="padding:8px 10px;text-align:left;color:var(--text3);font-weight:400;border-bottom:1px solid var(--border)">Resultado</th>
+            <th style="padding:8px 10px;text-align:left;color:var(--text3);font-weight:400;border-bottom:1px solid var(--border)">¿Importar?</th>
+          </tr>
+        </thead>
+        <tbody id="import-preview-tbody"></tbody>
+      </table>
+    </div>
+
+    <div id="import-dup-warn" style="display:none;margin-top:8px;font-size:11px;color:var(--amber);padding:7px 10px;background:rgba(255,179,71,0.1);border-radius:var(--r)"></div>
+
+    <div class="flex gap8" style="margin-top:14px">
+      <button class="btn btn-p" onclick="confirmImport()">Importar trades seleccionados</button>
+      <button class="btn btn-g" onclick="closeModal('modal-import')">Cancelar</button>
+    </div>
   </div>
 </div>
 </div>
@@ -1356,6 +1409,245 @@ function calcR(t){const e=parseFloat(t.entry),sl=parseFloat(t.sl),ex=parseFloat(
 function avgPnl(t){const v=Object.values(t.pnl||{});return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;}
 function refreshSetupDL(){const s=[...new Set(S.trades.map(t=>t.setup).filter(Boolean))];document.getElementById('setups-dl').innerHTML=s.map(x=>`<option value="${x}">`).join('');}
 function refreshSetupFilter(){const s=[...new Set(S.trades.map(t=>t.setup).filter(Boolean))];const el=document.getElementById('fset');const cur=el.value;el.innerHTML='<option value="">Setup</option>'+s.map(x=>`<option value="${x}">${x}</option>`).join('');if(s.includes(cur))el.value=cur;}
+/* ===== CSV IMPORT ===== */
+let parsedCsvTrades=[];
+
+function openImportModal(){
+  resetImport();
+  openModal('modal-import');
+}
+
+function resetImport(){
+  parsedCsvTrades=[];
+  document.getElementById('import-step-1').style.display='block';
+  document.getElementById('import-step-2').style.display='none';
+  document.getElementById('csv-file-input').value='';
+  document.getElementById('csv-drop-zone').style.borderColor='var(--border2)';
+}
+
+function handleCsvDrop(e){
+  e.preventDefault();
+  document.getElementById('csv-drop-zone').style.borderColor='var(--border2)';
+  const file=e.dataTransfer.files[0];
+  if(file&&file.name.endsWith('.csv'))processCSVFile(file);
+}
+
+function handleCsvFile(input){
+  const file=input.files[0];
+  if(file)processCSVFile(file);
+}
+
+function processCSVFile(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const text=e.target.result;
+    const trades=parseTradeVoteCSV(text);
+    if(!trades.length){alert('No se encontraron trades válidos en el CSV.');return;}
+    parsedCsvTrades=trades;
+    showImportPreview(trades);
+  };
+  reader.readAsText(file);
+}
+
+function parseTradeVoteCSV(text){
+  // Remove BOM if present
+  text=text.replace(/^\uFEFF/,'');
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2)return[];
+
+  const headers=lines[0].split(',').map(h=>h.trim());
+  const idx={
+    symbol:headers.indexOf('symbol'),
+    qty:headers.indexOf('qty'),
+    buyPrice:headers.indexOf('buyPrice'),
+    sellPrice:headers.indexOf('sellPrice'),
+    pnl:headers.indexOf('pnl'),
+    boughtTs:headers.indexOf('boughtTimestamp'),
+    soldTs:headers.indexOf('soldTimestamp'),
+    duration:headers.indexOf('duration')
+  };
+
+  const trades=[];
+  for(let i=1;i<lines.length;i++){
+    const cols=lines[i].split(',');
+    if(cols.length<6)continue;
+
+    const buyTs=cols[idx.boughtTs]?.trim()||'';
+    const sellTs=cols[idx.soldTs]?.trim()||'';
+    if(!buyTs||!sellTs)continue;
+
+    // Parse timestamps: "06/08/2026 09:10:12"
+    const parseDT=ts=>{
+      const[datePart,timePart]=ts.split(' ');
+      const[m,d,y]=datePart.split('/');
+      return{date:`${y}-${m}-${d}`,time:timePart?.slice(0,5)||'',full:new Date(`${y}-${m}-${d}T${timePart}`)};
+    };
+    const bought=parseDT(buyTs);
+    const sold=parseDT(sellTs);
+
+    // Direction: if bought before sold → Long, else Short
+    const isLong=bought.full<=sold.full;
+    const dir=isLong?'long':'short';
+    const entryTs=isLong?bought:sold;
+    const exitTs=isLong?sold:bought;
+
+    const buyPrice=parseFloat(cols[idx.buyPrice])||0;
+    const sellPrice=parseFloat(cols[idx.sellPrice])||0;
+    const entry=isLong?buyPrice:sellPrice;
+    const exitPrice=isLong?sellPrice:buyPrice;
+    const qty=parseInt(cols[idx.qty])||1;
+
+    // Parse PnL: "$342.00" or "$(343.00)"
+    const pnlRaw=cols[idx.pnl]?.trim()||'$0';
+    const isNeg=pnlRaw.includes('(');
+    const pnlNum=parseFloat(pnlRaw.replace(/[$(),]/g,''))||0;
+    const pnl=isNeg?-pnlNum:pnlNum;
+
+    const result=pnl>0?'win':pnl<0?'loss':'be';
+
+    // Determine session from entry time
+    const [hh]=entryTs.time.split(':').map(Number);
+    let session='ny-am';
+    if(hh<8)session='asia';
+    else if(hh<9)session='london';
+    else if(hh>=12&&hh<16)session='ny-pm';
+
+    // Calculate zone from entry-SL (we don't have SL so estimate from price action)
+    // We'll leave zone blank for manual fill
+    const slEst=isLong?entry-(Math.abs(exitPrice-entry)*0.5):entry+(Math.abs(exitPrice-entry)*0.5);
+
+    trades.push({
+      _id:'csv_'+cols[idx.boughtTs]+cols[idx.soldTs],
+      date:entryTs.date,
+      timeIn:entryTs.time,
+      timeOut:exitTs.time,
+      dir,
+      entry:entry.toString(),
+      sl:'',
+      tp:'',
+      exit:exitPrice.toString(),
+      contracts:qty,
+      slDay:null,
+      result,
+      pnlValue:pnl,
+      session,
+      setup:'ORB',
+      htf:'bullish',
+      confirmations:'',
+      exitType:result==='win'?'tp':'sl',
+      emotion:'',
+      confidence:0,
+      followed:'si',
+      notes:'Importado desde Tradovate CSV',
+      zone:null
+    });
+  }
+  return trades;
+}
+
+function showImportPreview(trades){
+  document.getElementById('import-step-1').style.display='none';
+  document.getElementById('import-step-2').style.display='block';
+
+  // Count duplicates
+  const existingIds=new Set(S.trades.map(t=>t._csvId).filter(Boolean));
+  const dups=trades.filter(t=>existingIds.has(t._id)).length;
+  if(dups>0){
+    document.getElementById('import-dup-warn').style.display='block';
+    document.getElementById('import-dup-warn').textContent=`⚠ ${dups} trade(s) ya existen en el journal (mismo timestamp). Se marcarán como duplicados.`;
+  }
+
+  document.getElementById('import-count').textContent=`${trades.length} trades encontrados en el CSV`;
+
+  // Account checkboxes
+  const acctEl=document.getElementById('import-acct-checks');
+  if(!S.accounts.length){
+    acctEl.innerHTML='<div style="font-size:11px;color:var(--amber)">⚠ No tienes cuentas configuradas. Agrega cuentas primero para asignar el P&L.</div>';
+  }else{
+    acctEl.innerHTML=S.accounts.map(a=>`
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="imp-acct-${a.id}" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">
+        <div style="width:7px;height:7px;border-radius:50%;background:${a.color}"></div>
+        <label for="imp-acct-${a.id}" style="font-size:12px;cursor:pointer">${a.name}</label>
+      </div>`).join('');
+  }
+
+  // Preview table
+  const tbody=document.getElementById('import-preview-tbody');
+  tbody.innerHTML=trades.map((t,i)=>{
+    const isDup=existingIds.has(t._id);
+    const pc=t.pnlValue>=0?'var(--green)':'var(--red)';
+    return`<tr style="opacity:${isDup?0.4:1}">
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text)">${t.date}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text3)">${t.timeIn}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border)"><span class="badge b${t.dir}">${t.dir.toUpperCase()}</span></td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text3)">${t.contracts}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text2)">${t.entry}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text2)">${t.exit}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border);font-weight:500;color:${pc}">${t.pnlValue>=0?'+':''}$${t.pnlValue.toFixed(2)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border)"><span class="badge b${t.result}">${t.result==='win'?'Win':t.result==='loss'?'Loss':'BE'}</span></td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border);text-align:center">
+        ${isDup?'<span style="font-size:10px;color:var(--amber)">duplicado</span>':`<input type="checkbox" id="imp-sel-${i}" checked style="width:13px;height:13px;accent-color:var(--accent);cursor:pointer">`}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function confirmImport(){
+  if(!parsedCsvTrades.length)return;
+
+  // Get selected accounts
+  const selectedAccts=S.accounts.filter(a=>document.getElementById('imp-acct-'+a.id)?.checked).map(a=>a.id);
+
+  // Get existing IDs to skip dups
+  const existingIds=new Set(S.trades.map(t=>t._csvId).filter(Boolean));
+
+  let added=0;
+  parsedCsvTrades.forEach((t,i)=>{
+    const cb=document.getElementById('imp-sel-'+i);
+    if(!cb||!cb.checked)return;
+    if(existingIds.has(t._id))return;
+
+    // Build pnl per account
+    const pnl={};
+    selectedAccts.forEach(id=>pnl[id]=t.pnlValue);
+
+    S.trades.push({
+      id:Date.now().toString()+Math.random().toString(36).slice(2),
+      _csvId:t._id,
+      date:t.date,
+      timeIn:t.timeIn,
+      timeOut:t.timeOut,
+      session:t.session,
+      dir:t.dir,
+      entry:t.entry,
+      sl:t.sl,
+      tp:t.tp,
+      exit:t.exit,
+      slDay:t.slDay,
+      contracts:t.contracts,
+      result:t.result,
+      setup:t.setup,
+      htf:t.htf,
+      confirmations:t.confirmations,
+      exitType:t.exitType,
+      emotion:t.emotion,
+      confidence:t.confidence,
+      followed:t.followed,
+      notes:t.notes,
+      zone:t.zone,
+      pnl,
+      accounts:selectedAccts
+    });
+    added++;
+  });
+
+  save();
+  closeModal('modal-import');
+  renderAll();
+  alert(`✓ ${added} trades importados correctamente.${selectedAccts.length===0?' Nota: no asignaste ninguna cuenta — edita los trades para agregar el P&L por cuenta.':''}`);
+}
+
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.modal-ov').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id);}));
@@ -1401,6 +1693,16 @@ function checkApiKeyBanner(){
 
 // check on load
 setTimeout(checkApiKeyBanner, 100);
+
+function clearAiChat(){
+  aiHistory=[];
+  const el=document.getElementById('ai-messages');
+  el.innerHTML=`<div id="ai-welcome" style="text-align:center;padding:60px 20px">
+    <div style="font-size:32px;margin-bottom:14px">✦</div>
+    <div style="font-family:var(--font-head);font-size:18px;font-weight:600;margin-bottom:8px">Tu analista de trading personal</div>
+    <div style="font-size:12px;color:var(--text3);max-width:480px;margin:0 auto;line-height:1.9">Hazme cualquier pregunta sobre tus trades, estrategia o cuentas.</div>
+  </div>`;
+}
 
 function buildTradingContext(){
   const ts=S.trades;
