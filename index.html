@@ -500,6 +500,32 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
 </div>
 </div>
 
+<!-- MODAL WITHDRAWAL -->
+<div class="modal-ov" id="modal-withdrawal">
+<div class="modal" style="width:440px">
+  <div class="modal-title">💰 Registrar retiro</div>
+  <input type="hidden" id="wd-acct-id">
+  <div id="wd-acct-info" style="padding:10px 12px;background:var(--bg3);border-radius:var(--r);margin-bottom:16px;font-size:12px;color:var(--text2)"></div>
+  <div class="fgrid" style="margin-bottom:14px">
+    <div class="fg"><label>Fecha del retiro</label><input type="date" id="wd-date"></div>
+    <div class="fg"><label>Monto retirado ($)</label><input type="number" id="wd-amount" step="0.01" placeholder="2000"></div>
+  </div>
+  <div class="fg" style="margin-bottom:14px">
+    <label>Nota (opcional)</label>
+    <input type="text" id="wd-note" placeholder="Primer retiro, ciclo completado...">
+  </div>
+  <!-- Preview -->
+  <div id="wd-preview" style="background:var(--bg3);border-radius:var(--r2);padding:14px;margin-bottom:16px;display:none">
+    <div style="font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">Resumen del retiro</div>
+    <div id="wd-preview-content"></div>
+  </div>
+  <div class="flex gap8">
+    <button class="btn btn-p" onclick="confirmWithdrawal()">Confirmar retiro</button>
+    <button class="btn btn-g" onclick="closeModal('modal-withdrawal')">Cancelar</button>
+  </div>
+</div>
+</div>
+
 <!-- MODAL IMPORT CSV -->
 <div class="modal-ov" id="modal-import">
 <div class="modal" style="width:720px">
@@ -819,7 +845,10 @@ function renderAcctPage(id){
           <div style="width:10px;height:10px;border-radius:50%;background:${a.color}"></div>
           <div><div class="page-title">${a.name}</div><div class="page-sub">${a.firm||''} · ${({challenge:'Challenge',pa:'PA/Funded',direct:'Direct Funded',sim:'Sim'}[a.type]||'')} · $${(a.bal||0).toLocaleString()} inicial</div></div>
         </div>
-        <button class="btn btn-g btn-sm" onclick="openEditAcct('${id}')">✎ Editar</button>
+        <div class="flex gap8">
+          ${(a.type==='pa'||a.type==='direct')&&a.status!=='blown'?`<button class="btn btn-p btn-sm" onclick="openWithdrawalModal('${id}')">💰 Registrar retiro</button>`:''}
+          <button class="btn btn-g btn-sm" onclick="openEditAcct('${id}')">✎ Editar</button>
+        </div>
       </div>
     </div>
     <!-- zona de saldo -->
@@ -883,6 +912,27 @@ function renderAcctPage(id){
           return`<tr><td class="tdm">${t.date}</td><td><span class="badge b${t.dir}">${(t.dir||'').toUpperCase()}</span></td><td>${t.setup||'—'}</td><td>${t.zone?`<span class="zone zone-${t.zone.toLowerCase()}">${t.zone}</span>`:'—'}</td><td style="color:var(--text3)">${t.contracts||'—'}</td><td><span class="badge b${t.result}">${t.result==='win'?'Win':t.result==='loss'?'Loss':'BE'}</span></td><td style="color:${pc};font-weight:500">${pnl>=0?'+':''}$${pnl.toFixed(0)}</td><td style="color:${rc};font-weight:500">${rStr}</td><td style="color:var(--text3)">${t.emotion||'—'}</td><td><button class="btn btn-g btn-sm" onclick="openTradeForm('${t.id}')">✎</button></td></tr>`;
         }).join('')}
       </tbody></table>`:'<div class="empty">Sin trades aún</div>'}</div>
+    </div>
+    <!-- HISTORIAL DE RETIROS -->
+    <div class="card mt12 mb0">
+      <div class="card-title">Historial de retiros</div>
+      ${(a.withdrawals||[]).length?`
+      <table><thead><tr><th>Fecha</th><th>Ciclo</th><th>Monto retirado</th><th>Recibes (90%)</th><th>Balance post-retiro</th><th>Nota</th><th></th></tr></thead><tbody>
+        ${(a.withdrawals||[]).map((w,i)=>`<tr>
+          <td class="tdm">${w.date}</td>
+          <td style="color:var(--text3)">#${w.cycle||'—'}</td>
+          <td style="color:var(--green);font-weight:500">$${w.amount.toFixed(0)}</td>
+          <td style="color:var(--accent);font-weight:500">$${(w.amount*0.9).toFixed(0)}</td>
+          <td style="color:var(--text2)">$${(w.balanceAfter||0).toLocaleString()}</td>
+          <td style="color:var(--text3);font-size:11px">${w.note||'—'}</td>
+          <td><button class="btn btn-d btn-sm" onclick="deleteWithdrawal('${id}',${i})">✕</button></td>
+        </tr>`).join('')}
+      </tbody></table>
+      <div style="margin-top:10px;padding:10px;background:var(--bg3);border-radius:var(--r);display:flex;gap:20px;flex-wrap:wrap;font-size:12px">
+        <span style="color:var(--text3)">Total retirado: <strong style="color:var(--text)">$${(a.withdrawals||[]).reduce((s,w)=>s+w.amount,0).toFixed(0)}</strong></span>
+        <span style="color:var(--text3)">Neto recibido (90%): <strong style="color:var(--accent)">$${((a.withdrawals||[]).reduce((s,w)=>s+w.amount,0)*0.9).toFixed(0)}</strong></span>
+        <span style="color:var(--text3)">Retiros realizados: <strong style="color:var(--text)">${(a.withdrawals||[]).length}</strong></span>
+      </div>`:'<div class="empty" style="padding:20px">Sin retiros registrados aún</div>'}
     </div>
   `;
   setTimeout(()=>{
@@ -1409,6 +1459,117 @@ function calcR(t){const e=parseFloat(t.entry),sl=parseFloat(t.sl),ex=parseFloat(
 function avgPnl(t){const v=Object.values(t.pnl||{});return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;}
 function refreshSetupDL(){const s=[...new Set(S.trades.map(t=>t.setup).filter(Boolean))];document.getElementById('setups-dl').innerHTML=s.map(x=>`<option value="${x}">`).join('');}
 function refreshSetupFilter(){const s=[...new Set(S.trades.map(t=>t.setup).filter(Boolean))];const el=document.getElementById('fset');const cur=el.value;el.innerHTML='<option value="">Setup</option>'+s.map(x=>`<option value="${x}">${x}</option>`).join('');if(s.includes(cur))el.value=cur;}
+/* ===== WITHDRAWALS ===== */
+function openWithdrawalModal(id){
+  const a=S.accounts.find(x=>x.id===id);
+  if(!a)return;
+  const s=acctStats(a);
+  document.getElementById('wd-acct-id').value=id;
+  document.getElementById('wd-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('wd-amount').value='';
+  document.getElementById('wd-note').value='';
+  document.getElementById('wd-preview').style.display='none';
+
+  const isLucid=(a.firm||'').toLowerCase().includes('lucid');
+  const cycle=a.payoutCycle||1;
+  const wdMax=isLucid?(cycle<=3?2000:2500):0;
+
+  document.getElementById('wd-acct-info').innerHTML=`
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div><div style="color:var(--text3);font-size:10px">Balance actual</div><div style="color:var(--green);font-weight:600;font-size:14px">$${s.bal.toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
+      <div><div style="color:var(--text3);font-size:10px">P&L del ciclo</div><div style="color:${s.pnl>=0?'var(--green)':'var(--red)'};font-weight:600;font-size:14px">${s.pnl>=0?'+':''}$${s.pnl.toFixed(0)}</div></div>
+      ${isLucid?`<div><div style="color:var(--text3);font-size:10px">Ciclo actual</div><div style="font-weight:600;font-size:14px">#${cycle}</div></div>
+      <div><div style="color:var(--text3);font-size:10px">Máx retiro</div><div style="color:var(--accent);font-weight:600;font-size:14px">$${wdMax}</div></div>`:''}
+      <div><div style="color:var(--text3);font-size:10px">Consistencia</div><div style="color:${s.consistOk?'var(--green)':'var(--amber)'};font-weight:600;font-size:14px">${s.consistRatio.toFixed(0)}% / ${a.consist||50}% ${s.consistOk?'✓':'⚠'}</div></div>
+    </div>`;
+
+  // live preview on amount change
+  document.getElementById('wd-amount').oninput=()=>updateWdPreview(id);
+  openModal('modal-withdrawal');
+}
+
+function updateWdPreview(id){
+  const a=S.accounts.find(x=>x.id===id);
+  if(!a)return;
+  const amount=parseFloat(document.getElementById('wd-amount').value)||0;
+  if(!amount){document.getElementById('wd-preview').style.display='none';return;}
+  const s=acctStats(a);
+  const isLucid=(a.firm||'').toLowerCase().includes('lucid');
+  const neto=amount*0.9;
+  const balAfter=isLucid?(a.bal||50000):(s.bal-amount); // Lucid resets to initial, Apex deducts
+  const cycle=a.payoutCycle||1;
+  const nextCycle=cycle+1;
+  const nextGoal=isLucid?(nextCycle<=2?3000:2500):'—';
+
+  document.getElementById('wd-preview').style.display='block';
+  document.getElementById('wd-preview-content').innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:7px">
+      ${[
+        ['Monto retirado','$'+amount.toFixed(0),'var(--text)'],
+        ['Recibes (90%)','$'+neto.toFixed(0),'var(--accent)'],
+        ['Balance post-retiro','$'+balAfter.toLocaleString(undefined,{maximumFractionDigits:0}),isLucid?'var(--text3)':'var(--text)'],
+        ...(isLucid?[
+          ['Ciclo actual → siguiente','#'+cycle+' → #'+nextCycle,'var(--text2)'],
+          ['Meta próximo ciclo','$'+nextGoal,'var(--text2)'],
+          ['Consistencia resetea','Sí, empieza en 0%','var(--green)'],
+        ]:[]),
+      ].map(([l,v,c])=>`<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text3)">${l}</span><span style="color:${c};font-weight:500">${v}</span></div>`).join('')}
+    </div>`;
+}
+
+function confirmWithdrawal(){
+  const id=document.getElementById('wd-acct-id').value;
+  const a=S.accounts.find(x=>x.id===id);
+  if(!a)return;
+  const amount=parseFloat(document.getElementById('wd-amount').value)||0;
+  const date=document.getElementById('wd-date').value;
+  const note=document.getElementById('wd-note').value.trim();
+  if(!amount||amount<=0){alert('Ingresa un monto válido');return;}
+  if(!date){alert('Ingresa la fecha del retiro');return;}
+
+  const s=acctStats(a);
+  const isLucid=(a.firm||'').toLowerCase().includes('lucid');
+  const cycle=a.payoutCycle||1;
+  const balAfter=isLucid?(a.bal||50000):(s.bal-amount);
+
+  // Save withdrawal record
+  if(!a.withdrawals)a.withdrawals=[];
+  a.withdrawals.push({date,amount,cycle,balanceAfter:balAfter,neto:amount*0.9,note});
+
+  // Update account: if Lucid → increment cycle + reset balance to initial
+  // If Apex → deduct from current balance (update bal to new starting point)
+  if(isLucid){
+    a.payoutCycle=(cycle||1)+1;
+    // For Lucid, the balance resets — we store this as a "withdrawal event" that affects P&L calculation
+    // We mark the withdrawal date so acctStats knows to only count trades after this date
+    a.lastWithdrawalDate=date;
+    a.balAfterLastWithdrawal=a.bal||50000; // resets to initial
+  } else {
+    // Apex: balance after withdrawal becomes the new reference balance
+    // We adjust bal to reflect the payout
+    a.bal=Math.max(0,balAfter);
+  }
+
+  const idx=S.accounts.findIndex(x=>x.id===id);
+  if(idx>=0)S.accounts[idx]=a;
+  save();
+  closeModal('modal-withdrawal');
+  showAcct(id);
+  renderSidebar();
+}
+
+function deleteWithdrawal(id,idx){
+  if(!confirm('¿Eliminar este retiro del historial?'))return;
+  const a=S.accounts.find(x=>x.id===id);
+  if(!a||!a.withdrawals)return;
+  a.withdrawals.splice(idx,1);
+  // revert payoutCycle if Lucid
+  const isLucid=(a.firm||'').toLowerCase().includes('lucid');
+  if(isLucid&&(a.payoutCycle||1)>1)a.payoutCycle=(a.payoutCycle||1)-1;
+  save();
+  showAcct(id);
+}
+
 /* ===== CSV IMPORT ===== */
 let parsedCsvTrades=[];
 
