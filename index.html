@@ -1610,19 +1610,13 @@ function confirmWithdrawal(){
   if(!a.withdrawals)a.withdrawals=[];
   a.withdrawals.push({date,amount,cycle,balanceAfter:balAfter,neto:amount*0.9,note});
 
-  // Update account: if Lucid → increment cycle + reset balance to initial
-  // If Apex → deduct from current balance (update bal to new starting point)
+  // Update account state — NEVER modify a.bal (initial balance must stay fixed)
   if(isLucid){
     a.payoutCycle=(cycle||1)+1;
-    // For Lucid, the balance resets — we store this as a "withdrawal event" that affects P&L calculation
-    // We mark the withdrawal date so acctStats knows to only count trades after this date
     a.lastWithdrawalDate=date;
-    a.balAfterLastWithdrawal=a.bal||50000; // resets to initial
-  } else {
-    // Apex: balance after withdrawal becomes the new reference balance
-    // We adjust bal to reflect the payout
-    a.bal=Math.max(0,balAfter);
+    // a.bal stays as the original initial balance ($50,000)
   }
+  // For Apex: nothing to change — balance is computed as a.bal + totalPnL - totalWithdrawn
 
   const idx=S.accounts.findIndex(x=>x.id===id);
   if(idx>=0)S.accounts[idx]=a;
