@@ -500,6 +500,38 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
 </div>
 </div>
 
+<!-- MODAL SYNC BALANCE -->
+<div class="modal-ov" id="modal-sync">
+<div class="modal" style="width:420px">
+  <div class="modal-title">⟳ Sincronizar balance real</div>
+  <p style="font-size:12px;color:var(--text2);margin-bottom:16px">Ingresa el balance actual que muestra tu plataforma (Tradovate/Apex/Lucid). El journal usará este valor como base y calculará los trades futuros sobre él.</p>
+  <input type="hidden" id="sync-acct-id">
+  <div id="sync-current" style="padding:10px 12px;background:var(--bg3);border-radius:var(--r);margin-bottom:14px;font-size:12px"></div>
+  <div class="fgrid" style="margin-bottom:14px">
+    <div class="fg">
+      <label>Balance real en plataforma ($)</label>
+      <input type="number" id="sync-balance" step="0.01" placeholder="51168.00">
+    </div>
+    <div class="fg">
+      <label>Fecha de sincronización</label>
+      <input type="date" id="sync-date">
+    </div>
+  </div>
+  <div class="fg" style="margin-bottom:14px">
+    <label>Nota (opcional)</label>
+    <input type="text" id="sync-note" placeholder="Verificado en Apex dashboard...">
+  </div>
+  <div id="sync-preview" style="background:var(--bg3);border-radius:var(--r2);padding:12px;margin-bottom:14px;display:none">
+    <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Resultado</div>
+    <div id="sync-preview-content"></div>
+  </div>
+  <div class="flex gap8">
+    <button class="btn btn-p" onclick="confirmSync()">Sincronizar</button>
+    <button class="btn btn-g" onclick="closeModal('modal-sync')">Cancelar</button>
+  </div>
+</div>
+</div>
+
 <!-- MODAL WITHDRAWAL -->
 <div class="modal-ov" id="modal-withdrawal">
 <div class="modal" style="width:440px">
@@ -690,11 +722,21 @@ function acctStats(a){
   const totalWithdrawn=(a.withdrawals||[]).reduce((s,w)=>s+w.amount,0);
 
   // Balance calculation
-  // Apex: initial + all-time P&L - total withdrawn
-  // Lucid: initial + cycle P&L (balance resets to initial after each withdrawal)
-  const bal=isLucid
-    ? (a.bal||0)+cyclePnl
-    : (a.bal||0)+totalPnlAllTime-totalWithdrawn;
+  // If a sync point exists, use it as base and add P&L from trades AFTER that sync date
+  // Apex: syncedBalance + P&L after sync date - withdrawals after sync date
+  // Lucid: syncedBalance + cycle P&L (already filtered by lastWithdrawalDate)
+  let bal;
+  if(a.syncBalance && a.syncDate){
+    const syncDate=a.syncDate;
+    const tradesAfterSync=allTs.filter(t=>t.date>syncDate);
+    const pnlAfterSync=tradesAfterSync.reduce((s,t)=>s+((t.pnl||{})[a.id]||0),0);
+    const withdrawalsAfterSync=(a.withdrawals||[]).filter(w=>w.date>syncDate).reduce((s,w)=>s+w.amount,0);
+    bal=a.syncBalance+pnlAfterSync-withdrawalsAfterSync;
+  } else {
+    bal=isLucid
+      ? (a.bal||0)+cyclePnl
+      : (a.bal||0)+totalPnlAllTime-totalWithdrawn;
+  }
 
   const wins=cycleTs.filter(t=>t.result==='win').length;
   const losses=cycleTs.filter(t=>t.result==='loss').length;
@@ -905,14 +947,23 @@ function renderAcctPage(id){
         </div>
         <div class="flex gap8">
           ${(a.type==='pa'||a.type==='direct')&&a.status!=='blown'?`<button class="btn btn-p btn-sm" onclick="openWithdrawalModal('${id}')">💰 Registrar retiro</button>`:''}
+          <button class="btn btn-g btn-sm" onclick="openSyncModal('${id}')">⟳ Balance real</button>
           <button class="btn btn-g btn-sm" onclick="openEditAcct('${id}')">✎ Editar</button>
         </div>
       </div>
     </div>
     <!-- zona de saldo -->
     <div style="padding:10px 14px;border-radius:var(--r2);margin-bottom:14px;font-size:12px;${zoneStyle}">
-      <div style="font-weight:600;color:${s.saldoZone.color};margin-bottom:2px">${s.saldoZone.label} ${s.saldoZone.slMax>0?'· SL máx hoy: $'+s.saldoZone.slMax:''}</div>
-      <div style="color:var(--text2)">${s.saldoZone.action}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-weight:600;color:${s.saldoZone.color};margin-bottom:2px">${s.saldoZone.label} ${s.saldoZone.slMax>0?'· SL máx hoy: $'+s.saldoZone.slMax:''}</div>
+          <div style="color:var(--text2)">${s.saldoZone.action}</div>
+        </div>
+        ${a.syncBalance?`<div style="font-size:11px;color:var(--text3);text-align:right">
+          <span style="color:var(--green)">⟳ Sincronizado</span> · $${a.syncBalance.toLocaleString()} el ${a.syncDate}
+          ${a.syncNote?`<br><span style="font-style:italic">${a.syncNote}</span>`:''}
+        </div>`:'<div style="font-size:11px;color:var(--text3)">Balance no sincronizado — usa ⟳ Balance real para anclar</div>'}
+      </div>
     </div>
     <div class="metrics">
       <div class="metric"><div class="mlbl">Balance</div><div class="mval ${s.pnl>=0?'pos':'neg'}">$${s.bal.toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
@@ -1533,6 +1584,74 @@ function calcR(t){const e=parseFloat(t.entry),sl=parseFloat(t.sl),ex=parseFloat(
 function avgPnl(t){const v=Object.values(t.pnl||{});return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;}
 function refreshSetupDL(){const s=[...new Set(S.trades.map(t=>t.setup).filter(Boolean))];document.getElementById('setups-dl').innerHTML=s.map(x=>`<option value="${x}">`).join('');}
 function refreshSetupFilter(){const s=[...new Set(S.trades.map(t=>t.setup).filter(Boolean))];const el=document.getElementById('fset');const cur=el.value;el.innerHTML='<option value="">Setup</option>'+s.map(x=>`<option value="${x}">${x}</option>`).join('');if(s.includes(cur))el.value=cur;}
+/* ===== SYNC BALANCE ===== */
+function openSyncModal(id){
+  const a=S.accounts.find(x=>x.id===id);
+  if(!a)return;
+  const s=acctStats(a);
+  document.getElementById('sync-acct-id').value=id;
+  document.getElementById('sync-balance').value='';
+  document.getElementById('sync-note').value='';
+  document.getElementById('sync-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('sync-preview').style.display='none';
+
+  document.getElementById('sync-current').innerHTML=`
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+      <div><div style="font-size:10px;color:var(--text3)">Balance calculado journal</div><div style="font-weight:600;font-size:14px;color:var(--amber)">$${s.bal.toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
+      ${a.syncBalance?`<div><div style="font-size:10px;color:var(--text3)">Último sync</div><div style="font-weight:600;font-size:14px;color:var(--green)">$${a.syncBalance.toLocaleString()} <span style="font-size:10px;color:var(--text3)">(${a.syncDate})</span></div></div>`:''}
+      <div><div style="font-size:10px;color:var(--text3)">¿Para qué sirve?</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Ancla el journal al valor real de tu plataforma</div></div>
+    </div>`;
+
+  document.getElementById('sync-balance').oninput=()=>updateSyncPreview(id);
+  openModal('modal-sync');
+}
+
+function updateSyncPreview(id){
+  const a=S.accounts.find(x=>x.id===id);
+  if(!a)return;
+  const s=acctStats(a);
+  const realBal=parseFloat(document.getElementById('sync-balance').value)||0;
+  const syncDate=document.getElementById('sync-date').value;
+  if(!realBal){document.getElementById('sync-preview').style.display='none';return;}
+
+  const diff=realBal-s.bal;
+  document.getElementById('sync-preview').style.display='block';
+  document.getElementById('sync-preview-content').innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${[
+        ['Balance journal (calculado)','$'+s.bal.toLocaleString(undefined,{maximumFractionDigits:0}),'var(--amber)'],
+        ['Balance real (plataforma)','$'+realBal.toLocaleString(undefined,{maximumFractionDigits:2}),'var(--green)'],
+        ['Diferencia',`${diff>=0?'+':''}$${diff.toFixed(0)}`,diff>=0?'var(--green)':'var(--red)'],
+        ['Fecha de anclaje',syncDate||'—','var(--text2)'],
+        ['Trades futuros','Se calcularán sobre $'+realBal.toLocaleString(),'var(--text3)'],
+      ].map(([l,v,c])=>`<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text3)">${l}</span><span style="color:${c};font-weight:500">${v}</span></div>`).join('')}
+    </div>`;
+}
+
+function confirmSync(){
+  const id=document.getElementById('sync-acct-id').value;
+  const a=S.accounts.find(x=>x.id===id);
+  if(!a)return;
+  const realBal=parseFloat(document.getElementById('sync-balance').value)||0;
+  const syncDate=document.getElementById('sync-date').value;
+  const note=document.getElementById('sync-note').value.trim();
+  if(!realBal||realBal<=0){alert('Ingresa un balance válido');return;}
+  if(!syncDate){alert('Ingresa la fecha de sincronización');return;}
+
+  a.syncBalance=realBal;
+  a.syncDate=syncDate;
+  a.syncNote=note;
+  if(!a.syncHistory)a.syncHistory=[];
+  a.syncHistory.push({date:syncDate,balance:realBal,note,ts:Date.now()});
+
+  const idx=S.accounts.findIndex(x=>x.id===id);
+  if(idx>=0)S.accounts[idx]=a;
+  save();
+  closeModal('modal-sync');
+  showAcct(id);
+  renderSidebar();
+}
+
 /* ===== WITHDRAWALS ===== */
 function openWithdrawalModal(id){
   const a=S.accounts.find(x=>x.id===id);
