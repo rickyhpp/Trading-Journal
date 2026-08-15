@@ -493,9 +493,12 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
     <div class="fg"><label>Estado</label><select id="a-status"><option value="active">Activa</option><option value="passed">Pasada ✓</option><option value="blown">Blown ✗</option></select></div>
   </div>
   <input type="hidden" id="a-id">
-  <div class="flex gap8" style="margin-top:14px">
-    <button class="btn btn-p" onclick="saveAcct()">Guardar</button>
-    <button class="btn btn-g" onclick="closeModal('modal-acct')">Cancelar</button>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px">
+    <div class="flex gap8">
+      <button class="btn btn-p" onclick="saveAcct()">Guardar</button>
+      <button class="btn btn-g" onclick="closeModal('modal-acct')">Cancelar</button>
+    </div>
+    <button class="btn btn-d btn-sm" id="btn-delete-acct" onclick="deleteAcct()" style="display:none">🗑 Eliminar cuenta</button>
   </div>
 </div>
 </div>
@@ -746,16 +749,28 @@ function acctStats(a){
   const wrAll=(allWins+allLosses)?allWins/(allWins+allLosses)*100:0;
 
   // Max DD (all time, using initial balance as base)
-  let peak=a.bal||0,dd=0,eq=a.bal||0;
+  // Max DD calculation — Apex uses TRAILING EOD drawdown
+  // The DD limit trails up with the peak balance but never goes below initial
+  // So: allowed floor = initial - maxddUsd, and it trails up as balance grows
+  let peak=a.bal||0, dd=0, eq=a.bal||0;
+  let trailingFloor=( (a.bal||0) - (a.maxddUsd||2000) ); // starting floor
   [...allTs].sort((a2,b)=>a2.date.localeCompare(b.date)).forEach(t=>{
     eq+=((t.pnl||{})[a.id]||0);
-    if(eq>peak)peak=eq;
-    if(peak-eq>dd)dd=peak-eq;
+    if(eq>peak){
+      peak=eq;
+      // trailing floor moves up with peak (EOD trailing)
+      trailingFloor=Math.max(trailingFloor, peak-(a.maxddUsd||2000));
+    }
+    const currentDD=peak-eq;
+    if(currentDD>dd)dd=currentDD;
   });
   const maxDDusd=dd;
   const maxDDpct=a.bal?dd/a.bal*100:0;
-  const allowedDD=a.maxddUsd||(a.bal*(a.maxddPct||4)/100);
-  const ddPct=allowedDD?dd/allowedDD*100:0;
+  // allowedDD relative to current peak (trailing), never less than initial allowedDD
+  const allowedDD=a.maxddUsd||2000;
+  // How close are we to the trailing floor?
+  const distanceToFloor=eq-trailingFloor;
+  const ddPct=allowedDD?Math.max(0,(allowedDD-distanceToFloor)/allowedDD*100):0;
 
   // Payout targets
   const wdGoal=isLucid?(payoutCycle<=2?3000:2500):(a.wdTarget||0);
@@ -804,7 +819,7 @@ function acctStats(a){
     maxDDusd,maxDDpct,ddPct,wdProgress,wdTarget,wdMax,wdGoal,isLucid,
     consistRatio,consistOk,minProfitForWD,safeDayLimit,totalProfit,bestDay,
     tradingDays,saldoZone,trades:cycleTs.length,totalTrades:allTs.length,
-    totalWithdrawn,wdCount,maxWithdrawals
+    totalWithdrawn,wdCount,maxWithdrawals,distanceToFloor,trailingFloor,eq
   };
 }
 
@@ -875,9 +890,9 @@ function renderAcctsOverview(){
           <div><div style="font-size:10px;color:var(--text3)">P&L</div><div style="font-family:var(--font-head);font-size:14px;font-weight:600;color:${s.pnl>=0?'var(--green)':'var(--red)'}">${s.pnl>=0?'+':''}$${s.pnl.toFixed(0)}</div></div>
           <div><div style="font-size:10px;color:var(--text3)">Win rate</div><div style="font-family:var(--font-head);font-size:14px;font-weight:600">${s.wr.toFixed(0)}%</div></div>
           <div style="min-width:160px">
-            <div style="font-size:10px;color:var(--text3)">Max DD — $${s.maxDDusd.toFixed(0)} / $${a.maxddUsd||'—'}</div>
-            <div class="dd-bg"><div class="dd-fill" style="width:${Math.min(100,s.ddPct)}%;background:${ddColor}"></div></div>
-            <div class="dd-lbl"><span>$0</span><span>$${a.maxddUsd||''}</span></div>
+            <div style="font-size:10px;color:var(--text3)">Max DD — distancia al límite: $${distanceToFloor>0?distanceToFloor.toFixed(0):'0'}</div>
+            <div class="dd-bg"><div class="dd-fill" style="width:${Math.min(100,ddPct)}%;background:${ddColor}"></div></div>
+            <div class="dd-lbl"><span>Límite: $${trailingFloor.toFixed(0)}</span><span>Balance: $${eq.toFixed(0)}</span></div>
           </div>
           ${wdTarget?`<div style="min-width:150px">
             <div style="font-size:10px;color:var(--text3)">Meta retiro — $${Math.max(0,s.pnl).toFixed(0)} / $${wdTarget}</div>
@@ -970,7 +985,7 @@ function renderAcctPage(id){
       <div class="metric"><div class="mlbl">P&L total</div><div class="mval ${s.pnl>=0?'pos':'neg'}">${s.pnl>=0?'+':''}$${s.pnl.toFixed(0)}</div></div>
       <div class="metric"><div class="mlbl">Win rate</div><div class="mval ${s.wr>=50?'pos':'neg'}">${s.wr.toFixed(1)}%</div></div>
       <div class="metric"><div class="mlbl">Trades</div><div class="mval">${s.trades}</div></div>
-      <div class="metric"><div class="mlbl">Max DD</div><div class="mval" style="color:${ddColor}">$${s.maxDDusd.toFixed(0)}</div><div class="msub">${s.maxDDpct.toFixed(1)}% · límite $${a.maxddUsd||'—'}</div><div class="dd-bg"><div class="dd-fill" style="width:${Math.min(100,s.ddPct)}%;background:${ddColor}"></div></div></div>
+      <div class="metric"><div class="mlbl">Max DD</div><div class="mval" style="color:${ddColor}">$${s.maxDDusd.toFixed(0)}</div><div class="msub">Límite trailing: $${s.trailingFloor.toFixed(0)}</div><div class="dd-bg"><div class="dd-fill" style="width:${Math.min(100,s.ddPct)}%;background:${ddColor}"></div></div></div>
       <div class="metric"><div class="mlbl">Días operados</div><div class="mval ${s.tradingDays>=(a.wdDays||8)?'pos':''}">${s.tradingDays}</div><div class="msub">mín ${a.wdDays||8} para retiro</div></div>
     </div>
     <!-- retiro + consistencia -->
@@ -1621,8 +1636,26 @@ function saveTrade(){
 function delTrade(id){if(!confirm('¿Eliminar?'))return;S.trades=S.trades.filter(t=>t.id!==id);save();renderAll();}
 
 /* ===== ACCOUNT FORM ===== */
-function openAddAcct(){editAId=null;document.getElementById('acct-modal-title').textContent='Nueva cuenta';document.getElementById('a-id').value='';['a-name','a-firm','a-bal','a-maxdd-usd','a-dailydd-usd','a-wd-target','a-wd-days','a-consist','a-start'].forEach(i=>document.getElementById(i).value='');document.getElementById('a-color').value='#c8f542';document.getElementById('a-type').value='pa';document.getElementById('a-status').value='active';document.getElementById('a-payout-cycle').value='1';openModal('modal-acct');}
-function openEditAcct(id){const a=S.accounts.find(x=>x.id===id);if(!a)return;document.getElementById('acct-modal-title').textContent='Editar cuenta';document.getElementById('a-id').value=id;document.getElementById('a-name').value=a.name||'';document.getElementById('a-firm').value=a.firm||'';document.getElementById('a-bal').value=a.bal||'';document.getElementById('a-maxdd-usd').value=a.maxddUsd||'';document.getElementById('a-dailydd-usd').value=a.dailyddUsd||'';document.getElementById('a-wd-target').value=a.wdTarget||'';document.getElementById('a-wd-days').value=a.wdDays||'';document.getElementById('a-consist').value=a.consist||'';document.getElementById('a-start').value=a.start||'';document.getElementById('a-color').value=a.color||'#c8f542';document.getElementById('a-type').value=a.type||'pa';document.getElementById('a-status').value=a.status||'active';document.getElementById('a-payout-cycle').value=a.payoutCycle||1;openModal('modal-acct');}
+function openAddAcct(){editAId=null;document.getElementById('acct-modal-title').textContent='Nueva cuenta';document.getElementById('a-id').value='';['a-name','a-firm','a-bal','a-maxdd-usd','a-dailydd-usd','a-wd-target','a-wd-days','a-consist','a-start'].forEach(i=>document.getElementById(i).value='');document.getElementById('a-color').value='#c8f542';document.getElementById('a-type').value='pa';document.getElementById('a-status').value='active';document.getElementById('a-payout-cycle').value='1';document.getElementById('btn-delete-acct').style.display='none';openModal('modal-acct');}
+function openEditAcct(id){const a=S.accounts.find(x=>x.id===id);if(!a)return;document.getElementById('acct-modal-title').textContent='Editar cuenta';document.getElementById('a-id').value=id;document.getElementById('a-name').value=a.name||'';document.getElementById('a-firm').value=a.firm||'';document.getElementById('a-bal').value=a.bal||'';document.getElementById('a-maxdd-usd').value=a.maxddUsd||'';document.getElementById('a-dailydd-usd').value=a.dailyddUsd||'';document.getElementById('a-wd-target').value=a.wdTarget||'';document.getElementById('a-wd-days').value=a.wdDays||'';document.getElementById('a-consist').value=a.consist||'';document.getElementById('a-start').value=a.start||'';document.getElementById('a-color').value=a.color||'#c8f542';document.getElementById('a-type').value=a.type||'pa';document.getElementById('a-status').value=a.status||'active';document.getElementById('a-payout-cycle').value=a.payoutCycle||1;document.getElementById('btn-delete-acct').style.display='block';openModal('modal-acct');}
+
+function deleteAcct(){
+  const id=document.getElementById('a-id').value;
+  if(!id)return;
+  const a=S.accounts.find(x=>x.id===id);
+  if(!a)return;
+  if(!confirm(`¿Eliminar la cuenta "${a.name}"? Los trades asociados quedarán sin cuenta asignada.`))return;
+  S.accounts=S.accounts.filter(x=>x.id!==id);
+  // Remove account from trades
+  S.trades.forEach(t=>{
+    if(t.accounts)t.accounts=t.accounts.filter(x=>x!==id);
+    if(t.pnl&&t.pnl[id])delete t.pnl[id];
+  });
+  save();
+  closeModal('modal-acct');
+  showPage('master',document.querySelector('.nav-btn'));
+  renderAll();
+}
 function saveAcct(){
   const id=document.getElementById('a-id').value||Date.now().toString();
   const a={id,name:document.getElementById('a-name').value.trim(),firm:document.getElementById('a-firm').value.trim(),bal:parseFloat(document.getElementById('a-bal').value)||0,type:document.getElementById('a-type').value,maxddUsd:parseFloat(document.getElementById('a-maxdd-usd').value)||0,dailyddUsd:parseFloat(document.getElementById('a-dailydd-usd').value)||0,wdTarget:parseFloat(document.getElementById('a-wd-target').value)||0,wdDays:parseInt(document.getElementById('a-wd-days').value)||8,consist:parseFloat(document.getElementById('a-consist').value)||50,payoutCycle:parseInt(document.getElementById('a-payout-cycle').value)||1,start:document.getElementById('a-start').value,color:document.getElementById('a-color').value,status:document.getElementById('a-status').value};
