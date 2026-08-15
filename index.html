@@ -394,7 +394,7 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
   <div class="form-sec">
     <div class="form-sec-title">Precios & sizing</div>
     <div class="fgrid">
-      <div class="fg"><label>Dirección</label><select id="f-dir"><option value="long">Long</option><option value="short">Short</option></select></div>
+      <div class="fg"><label>Dirección</label><select id="f-dir" onchange="autoCalcTP()"><option value="long">Long</option><option value="short">Short</option></select></div>
       <div class="fg"><label>Entrada</label><input type="number" id="f-entry" step="0.25" placeholder="30628.75" oninput="autoCalcTP()"></div>
       <div class="fg"><label>Stop loss (precio)</label><input type="number" id="f-sl" step="0.25" placeholder="30615.75" oninput="autoCalcTP()"></div>
       <div class="fg"><label>Take profit (precio)</label><input type="number" id="f-tp" step="0.25" placeholder="auto" oninput="autoCalcTP()"></div>
@@ -1405,73 +1405,83 @@ function autoCalcTP(){
   // Replace commas with dots for European keyboards
   ['f-entry','f-sl','f-tp','f-exit','f-slday'].forEach(id=>{
     const el=document.getElementById(id);
-    if(el&&el.value.includes(','))el.value=el.value.replace(',','.');
+    if(el&&el.value.includes(','))el.value=el.value.replace(/,/g,'.');
   });
 
   const entry=parseFloat(document.getElementById('f-entry')?.value)||0;
   const sl=parseFloat(document.getElementById('f-sl')?.value)||0;
   const tp=parseFloat(document.getElementById('f-tp')?.value)||0;
+  const exit=parseFloat(document.getElementById('f-exit')?.value)||0;
   const dir=document.getElementById('f-dir')?.value||'long';
   const hint=document.getElementById('form-sizing-hint');
+  const RATIO=1.4;
+  const RISK=270;
 
-  // Need at least entry + one of (sl or tp) to calculate
   if(!entry){if(hint)hint.style.display='none';return;}
 
-  let computedSL=sl, computedTP=tp;
-  const risk=270;
+  let riskPts=0;
 
-  if(entry && sl && !tp){
-    // Have entry + SL → calculate TP at 1.4x
-    const riskPts=Math.abs(entry-sl);
-    const tpOffset=riskPts*1.4;
-    computedTP=dir==='long'?entry+tpOffset:entry-tpOffset;
+  if(sl&&!tp){
+    // Have SL → calculate TP
+    riskPts=Math.abs(entry-sl);
+    const tpPts=riskPts*RATIO;
+    const computedTP=dir==='long'?entry+tpPts:entry-tpPts;
     document.getElementById('f-tp').value=computedTP.toFixed(2);
 
-  } else if(entry && tp && !sl){
-    // Have entry + TP → back-calculate SL at 1/1.4x of TP distance
+  } else if(tp&&!sl){
+    // Have TP → calculate SL
     const tpPts=Math.abs(tp-entry);
-    const slPts=tpPts/1.4;
-    computedSL=dir==='long'?entry-slPts:entry+slPts;
+    riskPts=tpPts/RATIO;
+    const computedSL=dir==='long'?entry-riskPts:entry+riskPts;
     document.getElementById('f-sl').value=computedSL.toFixed(2);
 
-  } else if(entry && sl && tp){
-    // Have both — use SL for calculations
-    computedSL=sl; computedTP=tp;
+  } else if(sl&&tp){
+    // Have both — use SL as reference
+    riskPts=Math.abs(entry-sl);
   } else {
     if(hint)hint.style.display='none';
     return;
   }
 
-  // Calculate sizing from the SL we have
-  const velaDolars=Math.abs(entry-computedSL)*2; // MNQ: $2/point
-  if(velaDolars<=0){if(hint)hint.style.display='none';return;}
+  if(riskPts<=0){if(hint)hint.style.display='none';return;}
 
-  const contracts=Math.max(1,Math.floor(risk/velaDolars));
+  // Sizing
+  const velaDolars=riskPts*2; // MNQ $2/point
+  const contracts=Math.max(1,Math.floor(RISK/velaDolars));
   const slReal=contracts*velaDolars;
-  const tpDolars=slReal*1.4;
+  const tpDolars=slReal*RATIO;
   const zone=getZone(velaDolars);
-  const zc='zone-'+zone.toLowerCase().replace(' ','');
+  const zc='zone-'+(zone==='Máx 1c'?'max':zone.toLowerCase());
 
-  // Auto-fill contracts only if empty
+  // Auto-fill contracts if empty
   const ctsEl=document.getElementById('f-contracts');
   if(ctsEl&&!ctsEl.value)ctsEl.value=contracts;
 
-  // Auto-fill slday only if empty
+  // Auto-fill SL del día if empty
   const sldayEl=document.getElementById('f-slday');
   if(sldayEl&&!sldayEl.value)sldayEl.value=slReal.toFixed(0);
+
+  // Auto-detect result from exit price
+  if(exit&&entry){
+    const resultEl=document.getElementById('f-result');
+    if(resultEl){
+      const gained=dir==='long'?exit-entry:entry-exit;
+      if(gained>0.01)resultEl.value='win';
+      else if(gained<-0.01)resultEl.value='loss';
+      else resultEl.value='be';
+    }
+  }
 
   document._pendingZone=zone;
 
   if(hint){
     hint.style.display='block';
-    hint.innerHTML=`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:9px 14px;font-size:11px;display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+    hint.innerHTML=`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:9px 14px;font-size:11px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
       <span style="color:var(--text3)">Vela: <strong style="color:var(--text)">$${velaDolars.toFixed(2)}</strong></span>
       <span class="zone ${zc}">${zone}</span>
       <span style="color:var(--text3)">Contratos: <strong style="color:var(--accent)">${contracts}</strong></span>
       <span style="color:var(--text3)">SL real: <strong style="color:var(--red)">$${slReal.toFixed(0)}</strong></span>
       <span style="color:var(--text3)">TP en $: <strong style="color:var(--green)">$${tpDolars.toFixed(0)}</strong></span>
-      ${!sl&&computedSL?`<span style="color:var(--amber)">SL calculado: ${computedSL.toFixed(2)}</span>`:''}
-      ${!tp&&computedTP?`<span style="color:var(--amber)">TP calculado: ${computedTP.toFixed(2)}</span>`:''}
     </div>`;
   }
 }
