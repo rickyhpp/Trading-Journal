@@ -890,9 +890,9 @@ function renderAcctsOverview(){
           <div><div style="font-size:10px;color:var(--text3)">P&L</div><div style="font-family:var(--font-head);font-size:14px;font-weight:600;color:${s.pnl>=0?'var(--green)':'var(--red)'}">${s.pnl>=0?'+':''}$${s.pnl.toFixed(0)}</div></div>
           <div><div style="font-size:10px;color:var(--text3)">Win rate</div><div style="font-family:var(--font-head);font-size:14px;font-weight:600">${s.wr.toFixed(0)}%</div></div>
           <div style="min-width:160px">
-            <div style="font-size:10px;color:var(--text3)">Max DD — distancia al límite: $${distanceToFloor>0?distanceToFloor.toFixed(0):'0'}</div>
-            <div class="dd-bg"><div class="dd-fill" style="width:${Math.min(100,ddPct)}%;background:${ddColor}"></div></div>
-            <div class="dd-lbl"><span>Límite: $${trailingFloor.toFixed(0)}</span><span>Balance: $${eq.toFixed(0)}</span></div>
+            <div style="font-size:10px;color:var(--text3)">Max DD — distancia al límite: $${s.distanceToFloor>0?s.distanceToFloor.toFixed(0):'0'}</div>
+            <div class="dd-bg"><div class="dd-fill" style="width:${Math.min(100,s.ddPct)}%;background:${ddColor}"></div></div>
+            <div class="dd-lbl"><span>Límite: $${s.trailingFloor.toFixed(0)}</span><span>Balance: $${s.eq.toFixed(0)}</span></div>
           </div>
           ${wdTarget?`<div style="min-width:150px">
             <div style="font-size:10px;color:var(--text3)">Meta retiro — $${Math.max(0,s.pnl).toFixed(0)} / $${wdTarget}</div>
