@@ -395,11 +395,11 @@ tr:hover td{background:rgba(255,255,255,0.02);color:var(--text)}
     <div class="form-sec-title">Precios & sizing</div>
     <div class="fgrid">
       <div class="fg"><label>Dirección</label><select id="f-dir" onchange="autoCalcTP()"><option value="long">Long</option><option value="short">Short</option></select></div>
-      <div class="fg"><label>Entrada</label><input type="number" id="f-entry" step="0.25" placeholder="30628.75" oninput="autoCalcTP()"></div>
-      <div class="fg"><label>Stop loss (precio)</label><input type="number" id="f-sl" step="0.25" placeholder="30615.75" oninput="autoCalcTP()"></div>
-      <div class="fg"><label>Take profit (precio)</label><input type="number" id="f-tp" step="0.25" placeholder="auto" oninput="autoCalcTP()"></div>
-      <div class="fg"><label>Salida real (precio)</label><input type="number" id="f-exit" step="0.25" oninput="autoCalcTP()"></div>
-      <div class="fg"><label>SL del día ($)</label><input type="number" id="f-slday" step="0.01" placeholder="auto" oninput="autoCalcTP()"></div>
+      <div class="fg"><label>Entrada</label><input type="number" id="f-entry" step="0.25" placeholder="30628.75" onblur="autoCalcTP()"></div>
+      <div class="fg"><label>Stop loss (precio)</label><input type="number" id="f-sl" step="0.25" placeholder="30615.75" onblur="autoCalcTP()"></div>
+      <div class="fg"><label>Take profit (precio)</label><input type="number" id="f-tp" step="0.25" placeholder="auto" onblur="autoCalcTP()"></div>
+      <div class="fg"><label>Salida real (precio)</label><input type="number" id="f-exit" step="0.25" onblur="autoCalcTP()"></div>
+      <div class="fg"><label>SL del día ($)</label><input type="number" id="f-slday" step="0.01" placeholder="auto"></div>
       <div class="fg"><label>Contratos usados</label><input type="number" id="f-contracts" step="1" min="1" placeholder="auto"></div>
       <div class="fg"><label>Resultado</label><select id="f-result"><option value="win">Win</option><option value="loss">Loss</option><option value="be">Breakeven</option></select></div>
     </div>
@@ -1404,11 +1404,13 @@ function calcSizing(){
 function parsePrice(id){
   const el=document.getElementById(id);
   if(!el||!el.value)return 0;
-  // replace comma with dot, remove spaces
   const clean=el.value.toString().replace(/\s/g,'').replace(',','.');
   el.value=clean;
   return parseFloat(clean)||0;
 }
+
+// Track last entry/sl to detect changes and reset derived fields
+let _lastEntry=0, _lastSL=0, _lastTP=0;
 
 function autoCalcTP(){
   const entry=parsePrice('f-entry');
@@ -1420,19 +1422,26 @@ function autoCalcTP(){
   const RATIO=1.4;
   const RISK=270;
 
+  // If entry or SL changed, reset derived fields so they recalculate
+  if(entry!==_lastEntry || sl!==_lastSL || tp!==_lastTP){
+    document.getElementById('f-contracts').value='';
+    document.getElementById('f-slday').value='';
+    _lastEntry=entry; _lastSL=sl; _lastTP=tp;
+  }
+
   if(!entry){if(hint)hint.style.display='none';return;}
 
   let riskPts=0;
 
   if(sl>0 && tp===0){
-    // Have SL only → calculate TP
+    // SL given → calculate TP
     riskPts=Math.abs(entry-sl);
     if(riskPts<0.01){if(hint)hint.style.display='none';return;}
     const computedTP=dir==='long'?entry+riskPts*RATIO:entry-riskPts*RATIO;
     document.getElementById('f-tp').value=computedTP.toFixed(2);
 
   } else if(tp>0 && sl===0){
-    // Have TP only → calculate SL
+    // TP given → calculate SL
     const tpPts=Math.abs(tp-entry);
     if(tpPts<0.01){if(hint)hint.style.display='none';return;}
     riskPts=tpPts/RATIO;
@@ -1448,7 +1457,7 @@ function autoCalcTP(){
 
   if(riskPts<=0){if(hint)hint.style.display='none';return;}
 
-  // Sizing — MNQ: 1 point = $2
+  // Sizing
   const velaDolars=riskPts*2;
   const contracts=Math.max(1,Math.floor(RISK/velaDolars));
   const slReal=contracts*velaDolars;
@@ -1456,15 +1465,11 @@ function autoCalcTP(){
   const zone=getZone(velaDolars);
   const zc=zone==='Ideal'?'zone-ideal':zone==='Promedio'?'zone-promedio':zone==='Grande'?'zone-grande':zone==='Evitar'?'zone-evitar':'zone-max';
 
-  // Fill contracts if empty
-  const ctsEl=document.getElementById('f-contracts');
-  if(ctsEl&&!ctsEl.value)ctsEl.value=contracts;
+  // Fill contracts and slday
+  document.getElementById('f-contracts').value=contracts;
+  document.getElementById('f-slday').value=slReal.toFixed(0);
 
-  // Fill SL del día if empty
-  const sldayEl=document.getElementById('f-slday');
-  if(sldayEl&&!sldayEl.value)sldayEl.value=slReal.toFixed(0);
-
-  // Auto-detect result from exit price
+  // Auto-detect result from exit
   if(exit>0){
     const resultEl=document.getElementById('f-result');
     if(resultEl){
