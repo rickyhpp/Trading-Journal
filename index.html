@@ -1401,17 +1401,20 @@ function calcSizing(){
 }
 
 /* ===== AUTO CALC TP IN FORM ===== */
-function autoCalcTP(){
-  // Replace commas with dots for European keyboards
-  ['f-entry','f-sl','f-tp','f-exit','f-slday'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el&&el.value.includes(','))el.value=el.value.replace(/,/g,'.');
-  });
+function parsePrice(id){
+  const el=document.getElementById(id);
+  if(!el||!el.value)return 0;
+  // replace comma with dot, remove spaces
+  const clean=el.value.toString().replace(/\s/g,'').replace(',','.');
+  el.value=clean;
+  return parseFloat(clean)||0;
+}
 
-  const entry=parseFloat(document.getElementById('f-entry')?.value)||0;
-  const sl=parseFloat(document.getElementById('f-sl')?.value)||0;
-  const tp=parseFloat(document.getElementById('f-tp')?.value)||0;
-  const exit=parseFloat(document.getElementById('f-exit')?.value)||0;
+function autoCalcTP(){
+  const entry=parsePrice('f-entry');
+  const sl=parsePrice('f-sl');
+  const tp=parsePrice('f-tp');
+  const exit=parsePrice('f-exit');
   const dir=document.getElementById('f-dir')?.value||'long';
   const hint=document.getElementById('form-sizing-hint');
   const RATIO=1.4;
@@ -1421,22 +1424,22 @@ function autoCalcTP(){
 
   let riskPts=0;
 
-  if(sl&&!tp){
-    // Have SL → calculate TP
+  if(sl>0 && tp===0){
+    // Have SL only → calculate TP
     riskPts=Math.abs(entry-sl);
-    const tpPts=riskPts*RATIO;
-    const computedTP=dir==='long'?entry+tpPts:entry-tpPts;
+    if(riskPts<0.01){if(hint)hint.style.display='none';return;}
+    const computedTP=dir==='long'?entry+riskPts*RATIO:entry-riskPts*RATIO;
     document.getElementById('f-tp').value=computedTP.toFixed(2);
 
-  } else if(tp&&!sl){
-    // Have TP → calculate SL
+  } else if(tp>0 && sl===0){
+    // Have TP only → calculate SL
     const tpPts=Math.abs(tp-entry);
+    if(tpPts<0.01){if(hint)hint.style.display='none';return;}
     riskPts=tpPts/RATIO;
     const computedSL=dir==='long'?entry-riskPts:entry+riskPts;
     document.getElementById('f-sl').value=computedSL.toFixed(2);
 
-  } else if(sl&&tp){
-    // Have both — use SL as reference
+  } else if(sl>0 && tp>0){
     riskPts=Math.abs(entry-sl);
   } else {
     if(hint)hint.style.display='none';
@@ -1445,30 +1448,28 @@ function autoCalcTP(){
 
   if(riskPts<=0){if(hint)hint.style.display='none';return;}
 
-  // Sizing
-  const velaDolars=riskPts*2; // MNQ $2/point
+  // Sizing — MNQ: 1 point = $2
+  const velaDolars=riskPts*2;
   const contracts=Math.max(1,Math.floor(RISK/velaDolars));
   const slReal=contracts*velaDolars;
   const tpDolars=slReal*RATIO;
   const zone=getZone(velaDolars);
-  const zc='zone-'+(zone==='Máx 1c'?'max':zone.toLowerCase());
+  const zc=zone==='Ideal'?'zone-ideal':zone==='Promedio'?'zone-promedio':zone==='Grande'?'zone-grande':zone==='Evitar'?'zone-evitar':'zone-max';
 
-  // Auto-fill contracts if empty
+  // Fill contracts if empty
   const ctsEl=document.getElementById('f-contracts');
   if(ctsEl&&!ctsEl.value)ctsEl.value=contracts;
 
-  // Auto-fill SL del día if empty
+  // Fill SL del día if empty
   const sldayEl=document.getElementById('f-slday');
   if(sldayEl&&!sldayEl.value)sldayEl.value=slReal.toFixed(0);
 
   // Auto-detect result from exit price
-  if(exit&&entry){
+  if(exit>0){
     const resultEl=document.getElementById('f-result');
     if(resultEl){
       const gained=dir==='long'?exit-entry:entry-exit;
-      if(gained>0.01)resultEl.value='win';
-      else if(gained<-0.01)resultEl.value='loss';
-      else resultEl.value='be';
+      resultEl.value=gained>0.01?'win':gained<-0.01?'loss':'be';
     }
   }
 
